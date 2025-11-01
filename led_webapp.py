@@ -87,7 +87,7 @@ def update_leds():
     global led_state_cache
     with led_lock:
         led_state_cache = [tuple(leds[i]) for i in range(NUM_LEDS)]
-        update_leds()
+        leds.show()
 
 # ===================================================================
 #   LED - INIT
