@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌈 LED Neon Control</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 class="neon-title">🌈 LED Neon Control</h1>
+            <p class="subtitle">30×10 APA102/DotStar LED Panel</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Status Display -->
+            <div class="card status-card">
+                <h2>Status</h2>
+                <div class="status-info">
+                    <div class="status-item">
+                        <span class="label">Aktueller Effekt:</span>
+                        <span id="current-effect" class="value">off</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">Helligkeit:</span>
+                        <span id="current-brightness" class="value">50%</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sensor Data -->
+            <div class="card sensor-card">
+                <h2>🌡️ Sensor Daten</h2>
+                <div class="sensor-data">
+                    <div class="sensor-item">
+                        <div class="sensor-icon">🌡️</div>
+                        <div class="sensor-value" id="temperature">--</div>
+                        <div class="sensor-label">Temperatur (°C)</div>
+                    </div>
+                    <div class="sensor-item">
+                        <div class="sensor-icon">📊</div>
+                        <div class="sensor-value" id="pressure">----</div>
+                        <div class="sensor-label">Luftdruck (hPa)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Clock Display -->
+            <div class="card clock-card">
+                <h2>🕐 Uhrzeit</h2>
+                <div class="clock-display">
+                    <div id="clock-time" class="clock-time">--:--:--</div>
+                </div>
+            </div>
+
+            <!-- LED Effects -->
+            <div class="card effects-card">
+                <h2>LED Effekte</h2>
+                <div class="effects-grid">
+                    <button class="effect-btn" data-effect="rainbow">🌈 Rainbow</button>
+                    <button class="effect-btn" data-effect="breathing">💨 Breathing</button>
+                    <button class="effect-btn" data-effect="sine_wave">🌊 Sine Wave</button>
+                    <button class="effect-btn" data-effect="flash">⚡ Flash</button>
+                    <button class="effect-btn" data-effect="diagnose">🔍 Diagnose</button>
+                    <button class="effect-btn" data-effect="clock">🕐 Uhr</button>
+                    <button class="effect-btn" data-effect="caterpillar">🐛 Raupe</button>
+                    <button class="effect-btn" data-effect="sensor_display">📊 Sensor-Display</button>
+                    <button class="effect-btn" data-effect="gradient">🎨 Gradient</button>
+                    <button class="effect-btn" data-effect="sparkle">✨ Sparkle</button>
+                    <button class="effect-btn" data-effect="static">🎨 Statische Farbe</button>
+                    <button class="effect-btn off-btn" data-effect="off">⭕ AUS</button>
+                </div>
+            </div>
+
+            <!-- Color Control -->
+            <div class="card color-card">
+                <h2>Farbsteuerung</h2>
+                <div class="color-control">
+                    <label for="color-slider">Regenbogen-Slider:</label>
+                    <input type="range" id="color-slider" min="0" max="360" value="0" class="rainbow-slider">
+                    <div class="color-preview" id="color-preview"></div>
+                    <button id="apply-color" class="apply-btn">Farbe anwenden</button>
+                </div>
+            </div>
+
+            <!-- Brightness Control -->
+            <div class="card brightness-card">
+                <h2>Helligkeitsregelung</h2>
+                <div class="brightness-control">
+                    <label for="brightness-slider">Helligkeit: <span id="brightness-value">50</span>%</label>
+                    <input type="range" id="brightness-slider" min="0" max="100" value="50" class="brightness-slider">
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Raspberry Pi 5 • APA102/DotStar LED Panel • BMP180 Sensor</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
