@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>LED Neon Control</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Orbitron', sans-serif;
+      background-color: #000;
+    }
+
+    .neon-border {
+      box-shadow:
+        0 0 5px #0ff,
+        0 0 10px #0ff,
+        0 0 20px #0ff,
+        0 0 40px #0ff,
+        0 0 80px #0ff;
+    }
+
+    .neon-text {
+      text-shadow:
+        0 0 5px #fff,
+        0 0 10px #0ff,
+        0 0 20px #0ff,
+        0 0 40px #0ff;
+    }
+
+    .danger-button {
+      background: linear-gradient(to right, #ff0000, #cc0000);
+      box-shadow: 0 0 10px #ff0000, 0 0 30px #ff0000, 0 0 50px #ff0000;
+      color: white;
+      font-weight: bold;
+      border-radius: 1rem;
+      padding: 1rem;
+      transition: transform 0.2s ease;
+    }
+
+    .danger-button:hover {
+      transform: scale(1.05);
+      background: #ff1a1a;
+    }
+
+    .on-button {
+      background: linear-gradient(to right, #0099ff, #0033cc);
+      box-shadow: 0 0 10px #00ccff, 0 0 30px #00ccff, 0 0 50px #00ccff;
+      color: white;
+      font-weight: bold;
+      border-radius: 1rem;
+      padding: 1rem;
+      transition: transform 0.2s ease;
+    }
+
+    .on-button:hover {
+      transform: scale(1.05);
+      background: #0077ff;
+    }
+
+    .effect-button {
+      border: 2px solid #0ff;
+      color: #0ff;
+      background: transparent;
+      padding: 0.75rem;
+      border-radius: 0.75rem;
+      font-weight: bold;
+      text-shadow: 0 0 5px #0ff;
+      transition: all 0.3s ease;
+    }
+
+    .effect-button:hover {
+      background: #0ff;
+      color: black;
+      box-shadow: 0 0 20px #0ff, 0 0 40px #0ff;
+    }
+
+    input[type="range"] {
+      accent-color: #00ffff;
+    }
+  </style>
+</head>
+<body class="text-white p-6 min-h-screen flex items-center justify-center">
+  <div class="bg-black bg-opacity-70 p-8 rounded-3xl neon-border w-full max-w-3xl text-center">
+    <h1 class="text-5xl font-bold neon-text mb-10">🌈 LED Neon Control</h1>
+
+    <!-- ALLES AN -->
+    <button onclick="allOn()" class="on-button w-full mb-4 text-xl">
+      🔵 ALLES AN
+    </button>
+
+    <!-- Farbwahl -->
+    <div class="mb-10">
+      <label class="block text-xl text-blue-300 mb-2">Farbe für „Alles An“</label>
+
+      <!-- Regenbogen-Balken -->
+      <div class="w-full h-4 rounded-lg mb-2" style="background: linear-gradient(to right, red, yellow, lime, cyan, blue);"></div>
+
+      <!-- Regler -->
+      <input id="color-slider" type="range" min="0" max="100" value="0"
+             class="w-full accent-blue-400" oninput="updateStaticColor(this.value)">
+    </div>
+
+    <!-- ALLES AUS -->
+    <button onclick="turnOff()" class="danger-button w-full mb-10 text-xl">
+      ⚠️ ALLES AUS
+    </button>
+
+    <!-- HELLIGKEIT -->
+    <div class="mb-10">
+      <label class="block text-xl text-cyan-300 mb-2">Helligkeit</label>
+      <input type="range" min="0" max="9" value="5" class="w-full" oninput="updateBrightness(this.value)">
+    </div>
+
+    <!-- EFFEKTE -->
+  <!-- Effekte-Container -->
+  <div id="effects-container" class="grid grid-cols-2 sm:grid-cols-3 gap-4"></div>
+
+      <script>
+        // 1. Array mit den kurzgeführten Effektnamen
+        const effectTitles = [
+          "rainbow",               // aus run_rainbow_effect
+          "breathing",             // aus run_breathing_effect
+          "sine_wave",             // aus run_sine_wave_effect
+          "flash",                 // aus run_flash_effect
+          "diagnose",              // aus run_diagnose_effect
+          "clock",                 // aus run_clock_effect
+          "raupe",                 // aus run_rainbow_caterpillar
+          "°C / hPa",               // unbenutzt
+          "-",                     // unbenutzt
+          "-"                      // unbenutzt
+        ];
+
+        // 2. Buttons generieren
+        const container = document.getElementById('effects-container');
+        container.innerHTML = effectTitles
+          .map((title, i) => `
+            <button onclick="triggerEffect(${i})" class="effect-button">
+              ${title}
+            </button>
+          `)
+          .join('');
+      </script>
+
+    </div>
+  </div>
+
+  <script>
+    let hueTimeout;
+
+    function updateBrightness(level) {
+      fetch('/brightness', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ value: level / 9 })
+      });
+    }
+
+    function turnOff() {
+      fetch('/off', { method: 'POST' });
+    }
+
+    function allOn() {
+      const slider = document.querySelector('#color-slider');
+      const hue = (slider.value / 100) * 0.66;
+      fetch('/static_color', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hue })
+      }).then(() => {
+        fetch('/static_on', { method: 'POST' });
+      });
+    }
+
+    function triggerEffect(index) {
+      fetch(`/effect/${index}`, { method: 'POST' });
+    }
+
+    function updateStaticColor(val) {
+      const hue = (val / 100) * 0.66;
+
+      // Farbwert ans Backend senden
+      fetch('/static_color', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hue })
+      });
+
+      // Nur wenn nicht schon im statischen Modus → LEDs setzen (mit Verzögerung)
+      clearTimeout(hueTimeout);
+      hueTimeout = setTimeout(() => {
+        fetch('/static_on', { method: 'POST' });
+      }, 200); // 200 ms Pause nach dem letzten Schiebeschritt
+    }
+
+
+
+  </script>
+</body>
+</html>
