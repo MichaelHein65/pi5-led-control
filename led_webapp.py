@@ -50,6 +50,9 @@ NUM_LEDS     = PANEL_WIDTH * PANEL_HEIGHT
 brightness   = 0.3
 static_color = (255, 0, 0)
 
+# LED Status Cache für Web-Vorschau
+led_state_cache = [(0, 0, 0)] * NUM_LEDS
+
 # ===================================================================
 #   B A S I S - S N A K E - M A P P I N G   (ohne Drehung!)
 # ===================================================================
@@ -75,6 +78,16 @@ def apply_rotation(x: int, y: int) -> tuple[int, int]:
 def xy_to_index(x: int, y: int) -> int:
     rx, ry = apply_rotation(x, y)
     return xy_to_index_unrotated(rx, ry)
+
+# ===================================================================
+#   L E D   S H O W   W R A P P E R
+# ===================================================================
+def update_leds():
+    """LEDs anzeigen und Status für Web-Vorschau cachen"""
+    global led_state_cache
+    with led_lock:
+        led_state_cache = [tuple(leds[i]) for i in range(NUM_LEDS)]
+        update_leds()
 
 # ===================================================================
 #   LED - INIT
@@ -163,7 +176,7 @@ def show_clock():
             leds[idx] = (r, g, b)
 
         # LED-Buffer anzeigen
-        leds.show()
+        update_leds()
 
 
 def run_clock_effect():
@@ -184,7 +197,7 @@ def run_rainbow_effect():
                 for j in range(NUM_LEDS):
                     hue = (j/NUM_LEDS + time.time()*0.1)%1.0
                     leds[j] = tuple(int(c*255) for c in colorsys.hsv_to_rgb(hue,1,1))
-                leds.show()
+                update_leds()
             time.sleep(0.02)
     finally:
         leds.auto_write = True
@@ -197,7 +210,7 @@ def run_rainbow_effect():
                 for j in range(NUM_LEDS):
                     hue = (j/NUM_LEDS + time.time()*0.1)%1.0
                     leds[j] = tuple(int(c*255) for c in colorsys.hsv_to_rgb(hue,1,1))
-                leds.show()
+                update_leds()
             time.sleep(0.02)
     finally:
         leds.auto_write = True
@@ -210,7 +223,7 @@ def run_breathing_effect():
             val=int(((math.sin(step)+1)/2)*255*brightness)
             with led_lock:
                 for i in range(NUM_LEDS): leds[i]=(val,val,val)
-                leds.show()
+                update_leds()
             step+=0.1
             time.sleep(0.02)
     finally:
@@ -227,7 +240,7 @@ def run_sine_wave_effect():
                     hue=(0.55+0.15*sine)%1
                     r,g,b=[int(c*255*brightness) for c in colorsys.hsv_to_rgb(hue,1,1)]
                     leds[i]=(r,g,b)
-                leds.show()
+                update_leds()
             off+=1
             time.sleep(0.03)
     finally:
@@ -242,7 +255,7 @@ def run_flash_effect():
                 if stop_event.is_set(): break
                 with led_lock:
                     for i in range(NUM_LEDS): leds[i]=c
-                    leds.show()
+                    update_leds()
                 time.sleep(0.2)
     finally:
         leds.auto_write = True
@@ -255,13 +268,13 @@ def run_diagnose_effect():
                 for i in range(NUM_LEDS):
                     if stop_event.is_set(): break
                     for j in range(NUM_LEDS): leds[j]=(0,0,0)
-                    leds[i]=(255,255,255); leds.show()
+                    leds[i]=(255,255,255); update_leds()
                     time.sleep(0.02)
                 break
     finally:
         with led_lock:
             for i in range(NUM_LEDS): leds[i]=(0,0,0)
-            leds.show()
+            update_leds()
         leds.auto_write = True
 
 def run_rainbow_caterpillar():
@@ -291,7 +304,7 @@ def run_rainbow_caterpillar():
                     hue=(i/max_len+time.time()*0.2)%1
                     r,g,b=[int(c*255) for c in colorsys.hsv_to_rgb(hue,1,1)]
                     leds[xy_to_index(cx,cy)]=(r,g,b)
-                leds.show()
+                update_leds()
             time.sleep(speed)
     finally:
         leds.auto_write = True
@@ -319,7 +332,7 @@ def run_sensor_display():
                                 if 0 <= x < PANEL_WIDTH and 0 <= y < PANEL_HEIGHT:
                                     leds[xy_to_index(x, y)] = color
 
-                leds.show()
+                update_leds()
 
             time.sleep(1)
             if int(time.time()) % 10 == 0:
@@ -367,7 +380,7 @@ def off():
     with led_lock:
         stop_current_effect()
         for i in range(NUM_LEDS): leds[i]=(0,0,0)
-        leds.show()
+        update_leds()
     return jsonify(success=True)
 
 @app.route('/static_color',methods=['POST'])
@@ -382,7 +395,7 @@ def static_on():
     with led_lock:
         stop_current_effect()
         for i in range(NUM_LEDS): leds[i]=static_color
-        leds.show()
+        update_leds()
     return jsonify(success=True)
 
 @app.route('/brightness',methods=['POST'])
@@ -399,6 +412,11 @@ def ui(fname): return send_from_directory('/home/pi/ledcontrol',fname)
 
 @app.route('/ledcontrol/')
 def ui_index(): return send_from_directory('/home/pi/ledcontrol','index.html')
+
+@app.route('/led_status')
+def led_status():
+    """LED Status für Web-Vorschau"""
+    return jsonify(leds=led_state_cache)
 
 # ===================================================================
 #   M A I N

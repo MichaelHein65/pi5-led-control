@@ -120,6 +120,14 @@
   <!-- Effekte-Container -->
   <div id="effects-container" class="grid grid-cols-1 sm:grid-cols-3 gap-4"></div>
 
+    <!-- LED VORSCHAU -->
+    <div class="mt-10">
+      <h2 class="text-2xl font-bold text-center text-cyan-300 mb-4">🔮 LED Vorschau</h2>
+      <div class="bg-black p-4 rounded-xl border-2 border-cyan-500">
+        <canvas id="led-canvas" width="600" height="200" class="w-full" style="image-rendering: pixelated;"></canvas>
+      </div>
+    </div>
+
       <script>
         // 1. Array mit den kurzgeführten Effektnamen
         const effectTitles = [
@@ -197,7 +205,39 @@
       }, 200); // 200 ms Pause nach dem letzten Schiebeschritt
     }
 
+    // LED Vorschau Canvas
+    const canvas = document.getElementById('led-canvas');
+    const ctx = canvas.getContext('2d');
+    const PANEL_WIDTH = 30;
+    const PANEL_HEIGHT = 10;
+    const LED_SIZE = canvas.width / PANEL_WIDTH;
 
+    function drawLEDs(ledData) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let x = 0; x < PANEL_WIDTH; x++) {
+        for (let y = 0; y < PANEL_HEIGHT; y++) {
+          const index = x * PANEL_HEIGHT + (x % 2 === 0 ? y : (PANEL_HEIGHT - 1 - y));
+          const color = ledData[index] || [0, 0, 0];
+          ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
+          ctx.fillRect(x * LED_SIZE, y * LED_SIZE, LED_SIZE - 1, LED_SIZE - 1);
+        }
+      }
+    }
+
+    // LED-Updates via Polling (alle 100ms)
+    setInterval(() => {
+      fetch('/led_status')
+        .then(res => res.json())
+        .then(data => {
+          if (data.leds) {
+            drawLEDs(data.leds);
+          }
+        })
+        .catch(() => {}); // Fehler ignorieren
+    }, 100);
+
+    // Initial schwarzes Display
+    drawLEDs(Array(300).fill([0, 0, 0]));
 
   </script>
 </body>
