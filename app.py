@@ -48,16 +48,6 @@ class MockAPA102:
     def brightness(self, value):
         self.brightness_value = value
 
-# Try to import real APA102, fall back to mock
-try:
-    import board
-    import adafruit_dotstar as dotstar
-    pixels = dotstar.DotStar(board.SCK, board.MOSI, LED_COUNT, brightness=0.5, auto_write=False)
-    print("Using real APA102 hardware")
-except (ImportError, NotImplementedError):
-    pixels = MockAPA102(LED_COUNT)
-    print("Using mock APA102 (development mode)")
-
 # BMP180/BMP280 Sensor mock
 class MockBMP:
     """Mock BMP sensor for development without hardware"""
@@ -69,16 +59,29 @@ class MockBMP:
     def pressure(self):
         return 1013.25 + (time.time() % 20) / 20
 
-# Try to import real sensor
+# Try to import hardware libraries and initialize devices
 try:
     import board
+    import adafruit_dotstar as dotstar
     import adafruit_bmp280
-    i2c = board.I2C()
-    bmp = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
-    print("Using real BMP280 sensor")
-except (ImportError, NotImplementedError, OSError):
+    
+    # Initialize APA102 LEDs
+    pixels = dotstar.DotStar(board.SCK, board.MOSI, LED_COUNT, brightness=0.5, auto_write=False)
+    print("Using real APA102 hardware")
+    
+    # Initialize BMP280 sensor
+    try:
+        i2c = board.I2C()
+        bmp = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
+        print("Using real BMP280 sensor")
+    except (OSError, RuntimeError):
+        bmp = MockBMP()
+        print("Using mock BMP sensor (sensor not found)")
+        
+except (ImportError, NotImplementedError):
+    pixels = MockAPA102(LED_COUNT)
     bmp = MockBMP()
-    print("Using mock BMP sensor (development mode)")
+    print("Using mock APA102 and BMP sensor (development mode)")
 
 
 def get_pixel_index(x, y):
