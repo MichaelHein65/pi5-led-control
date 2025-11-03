@@ -220,12 +220,14 @@
           const index = x * PANEL_HEIGHT + (x % 2 === 0 ? y : (PANEL_HEIGHT - 1 - y));
           const color = ledData[index] || [0, 0, 0];
           
-          // Transformationen: Y-Achse spiegeln + 180° Rotation
-          const flipped_x = PANEL_WIDTH - 1 - x;   // X-Flip (180°)
-          const flipped_y = PANEL_HEIGHT - 1 - y;  // Y-Flip
+          // Canvas-Rendering mit Transformationen:
+          // - Y-Achse spiegeln (vertikal umdrehen)
+          // - 180° Rotation (both X and Y flip)
+          const render_x = x;                              // Original X (nur Y-Achse Spiegelung)
+          const render_y = PANEL_HEIGHT - 1 - y;          // Y spiegeln (oben ↔ unten)
           
           ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-          ctx.fillRect(flipped_x * LED_SIZE, flipped_y * LED_SIZE, LED_SIZE - 1, LED_SIZE - 1);
+          ctx.fillRect(render_x * LED_SIZE, render_y * LED_SIZE, LED_SIZE - 1, LED_SIZE - 1);
         }
       }
     }
