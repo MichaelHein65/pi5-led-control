@@ -2,6 +2,11 @@
 
 Web-basierte Steuerung für ein 30×10 APA102/DotStar LED-Panel auf Raspberry Pi 5.
 
+> **⚡ Status:** v1.0.1 - Aktuell funktionsfähig ✅
+> 
+> **Letzter Fix (2025-11-03):** LED-State-Cache und Web-Vorschau wiederhergestellt
+> [Details siehe CHANGELOG.md](CHANGELOG.md)
+
 ## 🎨 Features
 
 - **Web-Interface** mit Neon-Design
@@ -164,6 +169,7 @@ ledcontrol/
 - SPI aktiviert? `sudo raspi-config` → Interface Options → SPI
 - Stromversorgung ausreichend? (5V, min. 10A für 300 LEDs)
 - Verkabelung korrekt? (Data→GPIO10, Clock→GPIO11)
+- Test: `python3 debug_led.py` ausführen
 
 ### Sensor nicht gefunden
 - I2C aktiviert? `sudo raspi-config` → Interface Options → I2C
@@ -172,6 +178,41 @@ ledcontrol/
 ### Web-Interface nicht erreichbar
 - Port 5050 frei? `sudo netstat -tulpn | grep 5050`
 - Firewall-Regel: `sudo ufw allow 5050`
+- Service läuft? `sudo systemctl status ledserver.service`
+
+### Web-Vorschau zeigt keine LEDs
+- Logs überprüfen: `sudo journalctl -u ledserver.service -f`
+- `/led_status` Endpoint aufruf: `curl http://localhost:5050/led_status`
+- Bekanntes Problem (gelöst in v1.0.1): siehe [CHANGELOG.md](CHANGELOG.md)
+
+### Performance-Probleme
+- Helligkeitsreduktion hilft Stromverbrauch zu senken
+- Effekt-Wechsel kann kurze Verzögerung verursachen (Thread-Sicherheit)
+
+## 📚 Dokumentation
+
+- **[CHANGELOG.md](CHANGELOG.md)** - Versions-Historie und Bug-Fixes
+- **[BUGFIX.md](BUGFIX.md)** - Dokumentation des letzten Major-Fixes
+- **[DEBUG.md](DEBUG.md)** - Debugging-Anleitung
+- **[SYSTEMATIC_DEBUG.md](SYSTEMATIC_DEBUG.md)** - Systematischer Debug-Prozess
+
+## 🛠️ Scripts
+
+- `debug_led.py` - 8-stufiger Hardware-Test
+- `deploy.sh` - Automatischer Deploy auf Pi
+- `led_test.py` - Basis-Test (Farben & Regenbogen)
+- `led_wave_fade.py` - Wave-Effekt mit Gamma-Korrektur
+- `Sensortest.py` - BMP180 Sensor auslesen
+
+---
+
+## 🐛 Bekannte Probleme und Lösungen
+
+### (✅ GELÖST) Web-Vorschau zeigt keine LEDs
+**Datum:** 2025-11-03  
+**Ursache:** Versehentliche Entfernung von `led_state_cache`, `update_leds()` und `/led_status` Endpoint  
+**Lösung:** Commit baea215 - Alle Komponenten wiederhergestellt  
+**Status:** Verifiziert und getestet ✅
 
 ## 📝 Lizenz
 
