@@ -15,30 +15,6 @@ from flask import Flask, request, jsonify, send_from_directory
 from threading import Lock
 import threading, time, math, colorsys, datetime
 import board, adafruit_dotstar
-import busio
-import bmp180
-
-# ===================================================================
-#   S E N S O R   I N I T I A L I S I E R U N G
-# ===================================================================
-i2c = busio.I2C(board.SCL, board.SDA)
-sensor = bmp180.BMP180(i2c)
-sensor.sea_level_pressure = 1013.25
-
-temperature = 0.0
-pressure = 0.0
-
-def sensor_loop():
-    global temperature, pressure
-    while True:
-        try:
-            temperature = sensor.temperature
-            pressure = sensor.pressure * 100
-        except Exception as e:
-            print("Sensorfehler:", e)
-        time.sleep(5)
-
-threading.Thread(target=sensor_loop, daemon=True).start()
 
 # ===================================================================
 #   P A N E L - K O N S T A N T E N
@@ -49,9 +25,6 @@ NUM_LEDS     = PANEL_WIDTH * PANEL_HEIGHT
 
 brightness   = 0.3
 static_color = (255, 0, 0)
-
-# LED Status Cache für Web-Vorschau
-led_state_cache = [(0, 0, 0)] * NUM_LEDS
 
 # ===================================================================
 #   B A S I S - S N A K E - M A P P I N G   (ohne Drehung!)
@@ -80,16 +53,6 @@ def xy_to_index(x: int, y: int) -> int:
     return xy_to_index_unrotated(rx, ry)
 
 # ===================================================================
-#   L E D   S H O W   W R A P P E R
-# ===================================================================
-def update_leds():
-    """LEDs anzeigen und Status für Web-Vorschau cachen"""
-    global led_state_cache
-    with led_lock:
-        led_state_cache = [tuple(leds[i]) for i in range(NUM_LEDS)]
-        leds.show()
-
-# ===================================================================
 #   LED - INIT
 # ===================================================================
 leds = adafruit_dotstar.DotStar(
@@ -98,6 +61,18 @@ leds = adafruit_dotstar.DotStar(
 )
 led_lock = Lock()
 stop_event = threading.Event()
+
+# LED Status Cache für Web-Vorschau
+led_state_cache = [(0, 0, 0)] * NUM_LEDS
+
+# ===================================================================
+#   L E D   S H O W   W R A P P E R
+# ===================================================================
+def update_leds():
+    """LEDs anzeigen und Status für Web-Vorschau cachen"""
+    global led_state_cache
+    led_state_cache = [tuple(leds[i]) for i in range(NUM_LEDS)]
+    leds.show()
 
 # ===================================================================
 #   Z I F F E R N - P A T T E R N S   &   F A R B E N
@@ -114,12 +89,6 @@ digit_patterns = {
     '8': [" WWW ","W   W"," WWW ","W   W","W   W"," WWW "],
     '9': [" WWW ","W   W","W   W"," WWWW","    W"," WWW "],
     ':': [" B "," B ","BBB","BBB"," B "," B "],
-    '.' : ["  ", "  ", "  ", "  ", " W", " W"],
-    '°' : ["    ", ".  .", " . ", "    ", "    ", "    "],
-    'C' : [" .. ", ".  ", ".   ", ".  ", " .. "],
-    'h' : [".   ", ".   ", "... ", ".  .", ".  ."],
-    'P' : ["... ", ".  .", "... ", ".   ", ".   "],
-    'a' : ["    ", " .. ", "   .", " ...", ".  ."]
 }
 color_map = {' ': (20,0,0), 'W': (255,255,255), 'B': (200,200,20)}
 
@@ -188,20 +157,9 @@ def run_clock_effect():
     finally:
         leds.auto_write = True
 
-
-def run_rainbow_effect():
-    print(">> Effekt 1: Rainbow gestartet")
-    try:
-        while not stop_event.is_set():
-            with led_lock:
-                for j in range(NUM_LEDS):
-                    hue = (j/NUM_LEDS + time.time()*0.1)%1.0
-                    leds[j] = tuple(int(c*255) for c in colorsys.hsv_to_rgb(hue,1,1))
-                update_leds()
-            time.sleep(0.02)
-    finally:
-        leds.auto_write = True
-
+# ===================================================================
+#   W E I T E R E   E F F E K T E
+# ===================================================================
 def run_rainbow_effect():
     print(">> Effekt 1: Rainbow gestartet")
     try:
@@ -308,37 +266,6 @@ def run_rainbow_caterpillar():
             time.sleep(speed)
     finally:
         leds.auto_write = True
-# Neue Funktion für Effekt 8
-
-def run_sensor_display():
-    print(">> Effekt 8: Temperatur & Druck (wechselnd)")
-    show_temp = True
-    try:
-        while not stop_event.is_set():
-            with led_lock:
-                leds.fill((0, 0, 10)) if show_temp else leds.fill((10, 10, 0))
-
-                text = f"{temperature:.1f} °C" if show_temp else f"{(pressure/100):.0f} hPa"
-                color = (255, 255, 0) if show_temp else (0, 200, 255)
-
-                x_offset = 2
-                for i, ch in enumerate(text):
-                    pattern = digit_patterns.get(ch, ["     "]*6)
-                    for pr, rowdata in enumerate(pattern):
-                        for pc, pixel in enumerate(rowdata):
-                            if pixel != ' ':
-                                x = x_offset + i*6 + pc
-                                y = 2 + pr  # vertikal etwas mittiger
-                                if 0 <= x < PANEL_WIDTH and 0 <= y < PANEL_HEIGHT:
-                                    leds[xy_to_index(x, y)] = color
-
-                update_leds()
-
-            time.sleep(1)
-            if int(time.time()) % 10 == 0:
-                show_temp = not show_temp
-    finally:
-        leds.auto_write = True
 
 # ===================================================================
 #   F L A S K  +  T H R E A D - C O N T R O L
@@ -365,7 +292,6 @@ def start_effect(idx):
         4:run_diagnose_effect,
         5:run_clock_effect,
         6:run_rainbow_caterpillar,
-        7:run_sensor_display,
     }
     if idx not in mapping:
         return jsonify(success=False,error="Unbekannter Effekt")
@@ -407,16 +333,16 @@ def set_brightness():
         leds.brightness=brightness
     return jsonify(success=True,value=brightness)
 
+@app.route('/led_status')
+def led_status():
+    """LED Status für Web-Vorschau"""
+    return jsonify(leds=led_state_cache)
+
 @app.route('/ledcontrol/<path:fname>')
 def ui(fname): return send_from_directory('/home/pi/ledcontrol',fname)
 
 @app.route('/ledcontrol/')
 def ui_index(): return send_from_directory('/home/pi/ledcontrol','index.html')
-
-@app.route('/led_status')
-def led_status():
-    """LED Status für Web-Vorschau"""
-    return jsonify(leds=led_state_cache)
 
 # ===================================================================
 #   M A I N
