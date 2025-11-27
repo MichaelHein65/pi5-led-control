@@ -204,6 +204,23 @@ def run_sine_wave_effect():
     finally:
         leds.auto_write = True
 
+def run_rainbow_wave_effect():
+    print(">> Effekt 3b: Rainbow Wave gestartet")
+    off=0
+    try:
+        while not stop_event.is_set():
+            with led_lock:
+                for i in range(NUM_LEDS):
+                    sine=(math.sin((i+off)*0.2)+1)/2
+                    hue=(off*0.01+sine*0.1)%1.0  # Durchlaufe alle Farben des Regenbogens
+                    r,g,b=[int(c*255*brightness) for c in colorsys.hsv_to_rgb(hue,1,1)]
+                    leds[i]=(r,g,b)
+                update_leds()
+            off+=1
+            time.sleep(0.03)
+    finally:
+        leds.auto_write = True
+
 def run_flash_effect():
     print(">> Effekt 4: Flash gestartet")
     cols=[(255,0,0),(0,255,0),(0,0,255),(255,255,0),(255,0,255)]
@@ -292,6 +309,7 @@ def start_effect(idx):
         4:run_diagnose_effect,
         5:run_clock_effect,
         6:run_rainbow_caterpillar,
+        7:run_rainbow_wave_effect,
     }
     if idx not in mapping:
         return jsonify(success=False,error="Unbekannter Effekt")
