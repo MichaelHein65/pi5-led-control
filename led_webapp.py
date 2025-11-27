@@ -212,12 +212,12 @@ def run_rainbow_wave_effect():
             with led_lock:
                 for i in range(NUM_LEDS):
                     sine=(math.sin((i+off)*0.2)+1)/2
-                    hue=(off*0.01+sine*0.1)%1.0  # Durchlaufe alle Farben des Regenbogens
+                    hue=(off*0.005+sine*0.1)%1.0  # Durchlaufe alle Farben des Regenbogens - langsamer
                     r,g,b=[int(c*255*brightness) for c in colorsys.hsv_to_rgb(hue,1,1)]
                     leds[i]=(r,g,b)
                 update_leds()
             off+=1
-            time.sleep(0.03)
+            time.sleep(0.05)
     finally:
         leds.auto_write = True
 
