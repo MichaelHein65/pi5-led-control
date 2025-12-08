@@ -4,6 +4,20 @@ Alle bemerkenswerten Änderungen an diesem Projekt sind in dieser Datei dokument
 
 ## [Unreleased]
 
+## [1.0.2] - 2025-12-08
+
+### ✨ Features
+- **Wetteranzeige erweitert:** Luftdruck (hPa) wird jetzt zusätzlich zu Temperatur, Beschreibung und Luftfeuchtigkeit angezeigt
+- **Neuer Uhr-Button:** Separater Button im Web-Interface um die Uhr-Anzeige zu starten
+  - Lila/Violett Design passend zum Wetter-Button
+  - Direkter Zugriff auf den Clock-Effekt
+
+### 🎨 UI-Verbesserungen
+- Wetter- und Uhr-Buttons als Paar untereinander angeordnet
+- Einheitliches Design mit unterschiedlichen Farben (Gelb für Wetter, Lila für Uhr)
+
+---
+
 ## [1.0.1] - 2025-11-03
 
 ### 🐛 Bugfix

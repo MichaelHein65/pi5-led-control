@@ -15,6 +15,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from threading import Lock
 import threading, time, math, colorsys, datetime
 import board, adafruit_dotstar
+import requests  # Füge zu den Imports hinzu
 
 # ===================================================================
 #   P A N E L - K O N S T A N T E N
@@ -91,6 +92,59 @@ digit_patterns = {
     ':': [" B "," B ","BBB","BBB"," B "," B "],
 }
 color_map = {' ': (20,0,0), 'W': (255,255,255), 'B': (200,200,20)}
+
+# ===================================================================
+#   B U C H S T A B E N - P A T T E R N S   (5x6 Pixel)
+# ===================================================================
+letter_patterns = {
+    'A': ["  W  "," W W ","W   W","WWWWW","W   W","W   W"],
+    'B': ["WWWW ","W   W","WWWW ","W   W","W   W","WWWW "],
+    'C': [" WWWW","W    ","W    ","W    ","W    "," WWWW"],
+    'D': ["WWWW ","W   W","W   W","W   W","W   W","WWWW "],
+    'E': ["WWWWW","W    ","WWWW ","W    ","W    ","WWWWW"],
+    'F': ["WWWWW","W    ","WWWW ","W    ","W    ","W    "],
+    'G': [" WWWW","W    ","W  WW","W   W","W   W"," WWW "],
+    'H': ["W   W","W   W","WWWWW","W   W","W   W","W   W"],
+    'I': [" WWW ","  W  ","  W  ","  W  ","  W  "," WWW "],
+    'J': ["  WWW","   W ","   W ","   W ","W  W "," WW  "],
+    'K': ["W   W","W  W ","WWW  ","W  W ","W   W","W   W"],
+    'L': ["W    ","W    ","W    ","W    ","W    ","WWWWW"],
+    'M': ["W   W","WW WW","W W W","W   W","W   W","W   W"],
+    'N': ["W   W","WW  W","W W W","W  WW","W   W","W   W"],
+    'O': [" WWW ","W   W","W   W","W   W","W   W"," WWW "],
+    'P': ["WWWW ","W   W","WWWW ","W    ","W    ","W    "],
+    'Q': [" WWW ","W   W","W   W","W W W","W  W "," WW W"],
+    'R': ["WWWW ","W   W","WWWW ","W  W ","W   W","W   W"],
+    'S': [" WWWW","W    "," WWW ","    W","    W","WWWW "],
+    'T': ["WWWWW","  W  ","  W  ","  W  ","  W  ","  W  "],
+    'U': ["W   W","W   W","W   W","W   W","W   W"," WWW "],
+    'V': ["W   W","W   W","W   W"," W W "," W W ","  W  "],
+    'W': ["W   W","W   W","W   W","W W W","WW WW","W   W"],
+    'X': ["W   W"," W W ","  W  ","  W  "," W W ","W   W"],
+    'Y': ["W   W"," W W ","  W  ","  W  ","  W  ","  W  "],
+    'Z': ["WWWWW","   W ","  W  "," W   ","W    ","WWWWW"],
+    'Ä': [" W W ","     "," WWW ","W   W","WWWWW","W   W"],
+    'Ö': [" W W ","     "," WWW ","W   W","W   W"," WWW "],
+    'Ü': [" W W ","     ","W   W","W   W","W   W"," WWW "],
+    'ß': [" WW  ","W  W ","W WW ","W   W","W   W","W WW "],
+    ' ': ["     ","     ","     ","     ","     ","     "],
+    '!': ["  W  ","  W  ","  W  ","  W  ","     ","  W  "],
+    '?': [" WWW ","W   W","   W ","  W  ","     ","  W  "],
+    '.': ["     ","     ","     ","     ","     ","  W  "],
+    '-': ["     ","     ","WWWWW","     ","     ","     "],
+    ',': ["     ","     ","     ","     ","  W  "," W   "],
+    ':': ["     ","  W  ","     ","     ","  W  ","     "],
+    '0': [" WWW ","W   W","W   W","W   W","W   W"," WWW "],
+    '1': ["  W  "," WW  ","  W  ","  W  ","  W  "," WWW "],
+    '2': [" WWW ","W   W","   W ","  W  "," W   ","WWWWW"],
+    '3': [" WWW ","W   W","   W ","  WW ","W   W"," WWW "],
+    '4': ["   W ","  WW "," W W ","W  W ","WWWWW","   W "],
+    '5': ["WWWWW","W    ","WWWW ","    W","W   W"," WWW "],
+    '6': [" WWW ","W    ","WWWW ","W   W","W   W"," WWW "],
+    '7': ["WWWWW","    W","   W ","  W  "," W   ","W    "],
+    '8': [" WWW ","W   W"," WWW ","W   W","W   W"," WWW "],
+    '9': [" WWW ","W   W","W   W"," WWWW","    W"," WWW "],
+}
 
 # ===================================================================
 #   U H R - E F F E K T
@@ -285,6 +339,139 @@ def run_rainbow_caterpillar():
         leds.auto_write = True
 
 # ===================================================================
+#   L A U F S C H R I F T   E F F E K T
+# ===================================================================
+scroll_text = ""
+scroll_speed = 5
+scroll_hue = 0.5
+
+def text_to_bitmap(text):
+    """Konvertiert Text zu einer Bitmap (Liste von Spalten)"""
+    bitmap = []
+    for char in text:
+        pattern = letter_patterns.get(char, letter_patterns.get(' '))
+        char_width = len(pattern[0])
+        for col in range(char_width):
+            column = []
+            for row in range(6):
+                column.append(pattern[row][col] if col < len(pattern[row]) else ' ')
+            bitmap.append(column)
+        bitmap.append([' '] * 6)  # Leerzeichen zwischen Buchstaben
+    return bitmap
+
+def run_scrolltext_effect(max_loops=0):
+    """Laufschrift-Effekt. max_loops=0 bedeutet unendlich."""
+    global scroll_text, scroll_speed, scroll_hue
+    print(f">> Laufschrift gestartet: '{scroll_text}' (loops: {'∞' if max_loops == 0 else max_loops})")
+    
+    bitmap = text_to_bitmap(scroll_text)
+    bitmap = bitmap[::-1]
+    total_width = len(bitmap)
+    offset = -total_width
+    
+    delay = 0.1 - (scroll_speed - 1) * 0.008
+    text_color = tuple(int(c * 255) for c in colorsys.hsv_to_rgb(scroll_hue, 1, brightness))
+    bg_color = (0, 0, 0)
+    
+    loop_count = 0
+    
+    try:
+        while not stop_event.is_set():
+            with led_lock:
+                for i in range(NUM_LEDS):
+                    leds[i] = bg_color
+                
+                for bx, column in enumerate(bitmap):
+                    screen_x = PANEL_WIDTH - 1 - (bx + offset)
+                    if 0 <= screen_x < PANEL_WIDTH:
+                        for row, pixel in enumerate(column):
+                            screen_y = 2 + row
+                            if 0 <= screen_y < PANEL_HEIGHT and pixel == 'W':
+                                idx = xy_to_index(screen_x, screen_y)
+                                leds[idx] = text_color
+                
+                update_leds()
+            
+            offset += 1
+            if offset > PANEL_WIDTH:
+                offset = -total_width
+                loop_count += 1
+                if max_loops > 0 and loop_count >= max_loops:
+                    break
+            
+            time.sleep(delay)
+    finally:
+        leds.auto_write = True
+
+# ===================================================================
+#   W E T T E R   A B R U F
+# ===================================================================
+OPENWEATHER_API_KEY = "085cae4f6d8d43713daf16cf58c7485c"
+WEATHER_CITY = "Rodgau,DE"
+
+def get_weather_text():
+    """Holt aktuelles Wetter für Rodgau und formatiert als Laufschrift"""
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?q={WEATHER_CITY}&appid={OPENWEATHER_API_KEY}&units=metric&lang=de"
+        res = requests.get(url, timeout=10)
+        data = res.json()
+        
+        if res.status_code != 200:
+            return "WETTER NICHT VERFÜGBAR", 0.5
+        
+        temp = round(data['main']['temp'])
+        desc = data['weather'][0]['description'].upper()
+        humidity = data['main']['humidity']
+        pressure = data['main']['pressure']  # Luftdruck in hPa
+        
+        # Umlaute ersetzen für LED-Anzeige
+        desc = desc.replace('Ä', 'AE').replace('Ö', 'OE').replace('Ü', 'UE').replace('ß', 'SS')
+        
+        # Farbe basierend auf Temperatur (blau=kalt, grün=mild, rot=heiß)
+        # -10°C = 0.66 (blau), 15°C = 0.33 (grün), 35°C = 0.0 (rot)
+        temp_hue = max(0.0, min(0.66, 0.66 - (temp + 10) / 45 * 0.66))
+        
+        return f"RODGAU: {temp} GRAD - {desc} - {humidity}% FEUCHTE - {pressure} HPA", temp_hue
+    except Exception as e:
+        print(f"Wetter-Fehler: {e}")
+        return "WETTER NICHT VERFÜGBAR", 0.5
+
+def check_weather_time():
+    """Prüft ob es x:55 Uhr ist und zeigt Wettermeldung"""
+    global effect_thread, scroll_text, scroll_speed, scroll_hue
+    
+    last_weather_hour = -1
+    
+    while True:
+        now = datetime.datetime.now()
+        
+        if now.minute == 55 and now.hour != last_weather_hour:
+            last_weather_hour = now.hour
+            
+            weather_text, temp_hue = get_weather_text()
+            print(f">> Wettermeldung: {weather_text}")
+            
+            scroll_text = weather_text
+            scroll_speed = 10
+            scroll_hue = temp_hue
+            
+            def weather_then_clock():
+                global effect_thread
+                run_scrolltext_effect(max_loops=2)  # Wetter: nur 2x
+                time.sleep(0.1)
+                if not stop_event.is_set():
+                    leds.auto_write = False
+                    run_clock_effect()
+            
+            with led_lock:
+                stop_current_effect()
+                leds.auto_write = False
+            effect_thread = threading.Thread(target=weather_then_clock)
+            effect_thread.start()
+        
+        time.sleep(30)
+
+# ===================================================================
 #   F L A S K  +  T H R E A D - C O N T R O L
 # ===================================================================
 app = Flask(__name__)
@@ -362,8 +549,55 @@ def ui(fname): return send_from_directory('/home/pi/ledcontrol',fname)
 @app.route('/ledcontrol/')
 def ui_index(): return send_from_directory('/home/pi/ledcontrol','index.html')
 
+@app.route('/scrolltext', methods=['POST'])
+def start_scrolltext():
+    global effect_thread, scroll_text, scroll_speed, scroll_hue
+    data = request.get_json()
+    scroll_text = data.get('text', 'HALLO')
+    scroll_speed = data.get('speed', 5)
+    scroll_hue = data.get('hue', 0.5)
+    
+    with led_lock:
+        stop_current_effect()
+        leds.auto_write = False
+        effect_thread = threading.Thread(target=run_scrolltext_effect, args=(0,))  # 0 = unendlich
+        effect_thread.start()
+    return jsonify(success=True)
+
+@app.route('/test_weather', methods=['POST'])
+def test_weather():
+    """Test-Endpoint für Wettermeldung"""
+    global effect_thread, scroll_text, scroll_speed, scroll_hue
+    
+    weather_text, temp_hue = get_weather_text()
+    print(f">> TEST Wettermeldung: {weather_text} (hue: {temp_hue})")
+    
+    scroll_text = weather_text
+    scroll_speed = 10
+    scroll_hue = temp_hue
+    
+    def weather_then_clock():
+        global effect_thread
+        run_scrolltext_effect(max_loops=2)  # Wetter: nur 2x
+        time.sleep(0.1)
+        if not stop_event.is_set():
+            leds.auto_write = False
+            run_clock_effect()
+    
+    with led_lock:
+        stop_current_effect()
+        leds.auto_write = False
+    effect_thread = threading.Thread(target=weather_then_clock)
+    effect_thread.start()
+    
+    return jsonify(success=True, text=weather_text, hue=temp_hue)
+
 # ===================================================================
 #   M A I N
 # ===================================================================
 if __name__ == '__main__':
+    # Starte Wetter-Check im Hintergrund
+    weather_thread = threading.Thread(target=check_weather_time, daemon=True)
+    weather_thread.start()
+    
     app.run(host='0.0.0.0', port=5050)
