@@ -13,7 +13,7 @@ rotate_z = True    # 180-Grad-Drehung (beide Achsen zugleich)
 # ===================================================================
 from flask import Flask, request, jsonify, send_from_directory
 from threading import Lock
-import threading, time, math, colorsys, datetime
+import threading, time, math, colorsys, datetime, os
 import board, adafruit_dotstar
 import requests  # Füge zu den Imports hinzu
 
@@ -406,7 +406,7 @@ def run_scrolltext_effect(max_loops=0):
 # ===================================================================
 #   W E T T E R   A B R U F
 # ===================================================================
-OPENWEATHER_API_KEY = "085cae4f6d8d43713daf16cf58c7485c"
+OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY", "")
 WEATHER_CITY = "Rodgau,DE"
 
 def get_weather_text():
