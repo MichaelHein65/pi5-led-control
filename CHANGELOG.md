@@ -4,6 +4,16 @@ Alle bemerkenswerten Änderungen an diesem Projekt sind in dieser Datei dokument
 
 ## [Unreleased]
 
+## [1.0.3] - 2025-12-08
+
+### 🔒 Security
+- **API Key aus Code entfernt:** OpenWeather API Key wird jetzt aus Umgebungsvariable geladen
+- `.env` zur `.gitignore` hinzugefügt
+- `.env.example` als Vorlage erstellt
+- `start_led_server.sh` lädt `.env` automatisch
+
+---
+
 ## [1.0.2] - 2025-12-08
 
 ### ✨ Features

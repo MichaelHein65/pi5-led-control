@@ -70,10 +70,21 @@ Das Web-Interface bietet:
 - Farbe basiert auf Temperatur (blau=kalt, grün=mild, rot=heiß)
 - Nach 2 Durchläufen → zurück zur Uhr
 
+### API Key Konfiguration
+
+Der OpenWeather API Key muss als Umgebungsvariable gesetzt werden:
+
+```bash
+# .env Datei erstellen
+echo 'OPENWEATHER_API_KEY=dein_key_hier' > .env
+```
+
+Hole dir einen kostenlosen Key unter: https://openweathermap.org/api
+
 ## Buchstaben
 
 Unterstützt: A-Z, Ä, Ö, Ü, ß, 0-9, Sonderzeichen (!, ?, ., -, ,, :)
 
 ## Version
 
-**v1.0.2** (Dezember 2025)
+**v1.0.3** (Dezember 2025)
