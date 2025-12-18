@@ -15,6 +15,14 @@
       background-color: #000;
     }
 
+    #led-canvas {
+      image-rendering: pixelated;
+    }
+
+    .orbitron-mono {
+      font-family: 'Orbitron', monospace;
+    }
+
     .neon-border {
       box-shadow:
         0 0 5px #0ff,
@@ -82,6 +90,15 @@
     input[type="range"] {
       accent-color: #00ffff;
     }
+
+    .rainbow-bar {
+      background: linear-gradient(to right, red, yellow, lime, cyan, blue);
+    }
+
+    .effect-stop-button {
+      border-color: #f00 !important;
+      color: #f00 !important;
+    }
   </style>
 </head>
 <body class="text-white p-6 min-h-screen flex items-center justify-center">
@@ -98,11 +115,12 @@
       <label class="block text-xl text-blue-300 mb-2">Farbe für „Alles An“</label>
 
       <!-- Regenbogen-Balken -->
-      <div class="w-full h-4 rounded-lg mb-2" style="background: linear-gradient(to right, red, yellow, lime, cyan, blue);"></div>
+      <div class="w-full h-4 rounded-lg mb-2 rainbow-bar"></div>
 
       <!-- Regler -->
       <input id="color-slider" type="range" min="0" max="100" value="0"
-             class="w-full accent-blue-400" oninput="updateStaticColor(this.value)">
+             class="w-full accent-blue-400" oninput="updateStaticColor(this.value)"
+             title="Farbwahl für Alles An">
     </div>
 
     <!-- ALLES AUS -->
@@ -114,26 +132,25 @@
     <div class="mb-10 p-4 rounded-xl border-2 border-cyan-500 bg-black bg-opacity-50">
       <label class="block text-xl text-cyan-300 mb-3">📜 Laufschrift</label>
       <input id="scroll-text" type="text" placeholder="TEXT EINGEBEN..."
-             class="w-full p-3 rounded-lg bg-gray-900 text-cyan-300 border-2 border-cyan-500 text-xl uppercase tracking-widest mb-3"
-             style="font-family: 'Orbitron', monospace;">
+             class="w-full p-3 rounded-lg bg-gray-900 text-cyan-300 border-2 border-cyan-500 text-xl uppercase tracking-widest mb-3 orbitron-mono">
       <div class="flex gap-3">
         <button onclick="startScrollText()" class="effect-button flex-1 text-lg">
           ▶️ Start
         </button>
-        <button onclick="stopScrollText()" class="effect-button flex-1 text-lg" style="border-color: #f00; color: #f00;">
+        <button onclick="stopScrollText()" class="effect-button flex-1 text-lg effect-stop-button">
           ⏹️ Stop
         </button>
       </div>
       <!-- Geschwindigkeit -->
       <div class="mt-3">
         <label class="block text-sm text-cyan-300 mb-1">Geschwindigkeit</label>
-        <input id="scroll-speed" type="range" min="1" max="10" value="5" class="w-full">
+        <input id="scroll-speed" type="range" min="1" max="10" value="5" class="w-full" title="Geschwindigkeit der Laufschrift">
       </div>
       <!-- Farbe -->
       <div class="mt-3">
         <label class="block text-sm text-cyan-300 mb-1">Textfarbe</label>
-        <div class="w-full h-3 rounded-lg mb-1" style="background: linear-gradient(to right, red, yellow, lime, cyan, blue);"></div>
-        <input id="scroll-color" type="range" min="0" max="100" value="50" class="w-full">
+        <div class="w-full h-3 rounded-lg mb-1 rainbow-bar"></div>
+        <input id="scroll-color" type="range" min="0" max="100" value="50" class="w-full" title="Textfarbe für Laufschrift wählen">
       </div>
     </div>
 
@@ -146,11 +163,12 @@
     <button onclick="showClock()" class="w-full mb-10 p-4 rounded-xl border-2 border-purple-400 bg-purple-900 bg-opacity-30 text-purple-300 text-xl font-bold hover:bg-purple-800 transition-all">
       🕐 UHR ANZEIGEN
     </button>
+    <p id="status-message" class="text-sm text-cyan-200 mb-10 block" style="min-height: 1.5rem;"></p>
 
     <!-- HELLIGKEIT -->
     <div class="mb-10">
       <label class="block text-xl text-cyan-300 mb-2">Helligkeit</label>
-      <input type="range" min="0" max="9" value="5" class="w-full" oninput="updateBrightness(this.value)">
+      <input type="range" min="0" max="9" value="5" class="w-full" oninput="updateBrightness(this.value)" title="Helligkeit einstellen">
     </div>
 
     <!-- EFFEKTE -->
@@ -161,23 +179,21 @@
     <div class="mt-10">
       <h2 class="text-2xl font-bold text-center text-cyan-300 mb-4">🔮 LED Vorschau</h2>
       <div class="bg-black p-4 rounded-xl border-2 border-cyan-500">
-        <canvas id="led-canvas" width="600" height="200" class="w-full" style="image-rendering: pixelated;"></canvas>
+        <canvas id="led-canvas" width="600" height="200" class="w-full"></canvas>
       </div>
     </div>
 
       <script>
         // 1. Array mit den kurzgeführten Effektnamen
         const effectTitles = [
-          "rainbow",               // aus run_rainbow_effect
-          "breathing",             // aus run_breathing_effect
-          "sine_wave",             // aus run_sine_wave_effect
-          "flash",                 // aus run_flash_effect
-          "diagnose",              // aus run_diagnose_effect
-          "clock",                 // aus run_clock_effect
-          "raupe",                 // aus run_rainbow_caterpillar
-          "rainbow_wave",          // aus run_rainbow_wave_effect
-          "-",                     // unbenutzt
-          "-"                      // unbenutzt
+          "rainbow",          // aus run_rainbow_effect
+          "breathing",        // aus run_breathing_effect
+          "sine_wave",        // aus run_sine_wave_effect
+          "flash",            // aus run_flash_effect
+          "diagnose",         // aus run_diagnose_effect
+          "clock",            // aus run_clock_effect
+          "raupe",            // aus run_rainbow_caterpillar
+          "rainbow_wave"      // aus run_rainbow_wave_effect
         ];
 
         // 2. Buttons generieren
@@ -190,27 +206,38 @@
           `)
           .join('');
       </script>
-
-    </div>
   </div>
 
   <script>
     let hueTimeout;
+    const statusEl = document.getElementById('status-message');
+
+    function setStatus(message, tone = 'info') {
+      if (!statusEl) return;
+      const color = tone === 'error' ? 'text-red-400' : 'text-cyan-200';
+      statusEl.className = `text-sm mb-10 block ${color}`;
+      statusEl.style.minHeight = '1.5rem';
+      statusEl.textContent = message || '';
+    }
 
     function showWeather() {
+      setStatus('Wetter wird geladen ...');
       fetch('/test_weather', { method: 'POST' })
         .then(res => res.json())
         .then(data => {
-          console.log('Wetter:', data.text);
-        });
+          if (data.success) {
+            setStatus(`Wetter geladen: ${data.text}`);
+          } else {
+            setStatus(`Fehler: ${data.text || 'Keine Daten'}`, 'error');
+          }
+        })
+        .catch(() => setStatus('Fehler: Wetterdienst nicht erreichbar', 'error'));
     }
 
     function showClock() {
       fetch('/effect/5', { method: 'POST' })
-        .then(res => res.json())
-        .then(data => {
-          console.log('Uhr gestartet');
-        });
+        .then(() => setStatus('Uhr gestartet'))
+        .catch(() => setStatus('Fehler beim Start der Uhr', 'error'));
     }
 
     function startScrollText() {
@@ -294,15 +321,13 @@
           // Snake-Pattern Mapping (wie im Backend)
           const index = x * PANEL_HEIGHT + (x % 2 === 0 ? y : (PANEL_HEIGHT - 1 - y));
           const color = ledData[index] || [0, 0, 0];
-          
-          // Canvas-Rendering mit Transformationen:
-          // - Y-Achse spiegeln (vertikal umdrehen)
-          // - 180° Rotation (both X and Y flip)
-          const render_x = x;                              // Original X (nur Y-Achse Spiegelung)
-          const render_y = PANEL_HEIGHT - 1 - y;          // Y spiegeln (oben ↔ unten)
-          
+
+          // Canvas-Rendering: 180° Drehung + Y-Flip (entspricht Panel-Ausrichtung)
+          const flippedX = PANEL_WIDTH - 1 - x;
+          const flippedY = PANEL_HEIGHT - 1 - y;
+
           ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-          ctx.fillRect(render_x * LED_SIZE, render_y * LED_SIZE, LED_SIZE - 1, LED_SIZE - 1);
+          ctx.fillRect(flippedX * LED_SIZE, flippedY * LED_SIZE, LED_SIZE - 1, LED_SIZE - 1);
         }
       }
     }

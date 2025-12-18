@@ -14,6 +14,7 @@ rotate_z = True    # 180-Grad-Drehung (beide Achsen zugleich)
 from flask import Flask, request, jsonify, send_from_directory
 from threading import Lock
 import threading, time, math, colorsys, datetime, os
+from zoneinfo import ZoneInfo
 import board, adafruit_dotstar
 import requests  # Füge zu den Imports hinzu
 
@@ -23,6 +24,12 @@ import requests  # Füge zu den Imports hinzu
 PANEL_WIDTH  = 30
 PANEL_HEIGHT = 10
 NUM_LEDS     = PANEL_WIDTH * PANEL_HEIGHT
+
+LOCAL_TIMEZONE = ZoneInfo("Europe/Berlin")
+LATITUDE = 50.0   # Rodgau
+LONGITUDE = 8.9
+MIN_BRIGHTNESS = 0.1
+MAX_BRIGHTNESS = 1.0
 
 brightness   = 0.3
 static_color = (255, 0, 0)
@@ -66,6 +73,21 @@ stop_event = threading.Event()
 # LED Status Cache für Web-Vorschau
 led_state_cache = [(0, 0, 0)] * NUM_LEDS
 
+sun_cache = {
+    "date": None,
+    "sunrise_today": None,
+    "sunset_today": None,
+    "sunrise_tomorrow": None,
+    "sunset_yesterday": None,
+}
+
+# Manual Override und sanfte Rückkehr
+manual_override_until = None
+ramp_start_time = None
+ramp_end_time = None
+ramp_start_brightness = None
+ramp_target = None
+
 # ===================================================================
 #   L E D   S H O W   W R A P P E R
 # ===================================================================
@@ -74,6 +96,15 @@ def update_leds():
     global led_state_cache
     led_state_cache = [tuple(leds[i]) for i in range(NUM_LEDS)]
     leds.show()
+
+
+def apply_brightness_value(val: float) -> float:
+    """Clamp und übertrage Helligkeit auf LEDs."""
+    global brightness
+    new_val = max(MIN_BRIGHTNESS, min(MAX_BRIGHTNESS, val))
+    brightness = new_val
+    leds.brightness = brightness
+    return new_val
 
 # ===================================================================
 #   Z I F F E R N - P A T T E R N S   &   F A R B E N
@@ -404,20 +435,197 @@ def run_scrolltext_effect(max_loops=0):
         leds.auto_write = True
 
 # ===================================================================
+#   A U T O - H E L L I G K E I T   N A C H   S O N N E N S T A N D
+# ===================================================================
+def fetch_sun_times_for_date(day: datetime.date):
+    """Holt Sonnenauf-/untergang für ein Datum (UTC -> Lokal)."""
+    url = (
+        "https://api.sunrise-sunset.org/json"
+        f"?lat={LATITUDE}&lng={LONGITUDE}"
+        f"&date={day.isoformat()}&formatted=0"
+    )
+    res = requests.get(url, timeout=10)
+    res.raise_for_status()
+
+    data = res.json()
+    if data.get("status") != "OK":
+        raise RuntimeError(f"Sun API status: {data.get('status')}")
+
+    sunrise_utc = datetime.datetime.fromisoformat(
+        data["results"]["sunrise"].replace("Z", "+00:00")
+    )
+    sunset_utc = datetime.datetime.fromisoformat(
+        data["results"]["sunset"].replace("Z", "+00:00")
+    )
+    return (
+        sunrise_utc.astimezone(LOCAL_TIMEZONE),
+        sunset_utc.astimezone(LOCAL_TIMEZONE),
+    )
+
+
+def refresh_sun_cache(now: datetime.datetime):
+    """Aktualisiert Sonnenzeiten (gestern/heute/morgen), maximal 1x täglich."""
+    today = now.date()
+    if sun_cache["date"] == today:
+        return
+
+    try:
+        sr_today, ss_today = fetch_sun_times_for_date(today)
+        sr_tomorrow, _ = fetch_sun_times_for_date(today + datetime.timedelta(days=1))
+        _, ss_yesterday = fetch_sun_times_for_date(today - datetime.timedelta(days=1))
+
+        sun_cache.update(
+            {
+                "date": today,
+                "sunrise_today": sr_today,
+                "sunset_today": ss_today,
+                "sunrise_tomorrow": sr_tomorrow,
+                "sunset_yesterday": ss_yesterday,
+            }
+        )
+        print(
+            f">> Sonnenzeiten aktualisiert: SR {sr_today.time()} / SS {ss_today.time()}"
+        )
+    except Exception as exc:
+        # Fallback: Daten des letzten erfolgreichen Tages auf heute schieben
+        last_date = sun_cache.get("date")
+        sr_last = sun_cache.get("sunrise_today")
+        ss_last = sun_cache.get("sunset_today")
+        if last_date and sr_last and ss_last:
+            delta_days = (today - last_date).days
+            if delta_days != 0:
+                sr_today = sr_last + datetime.timedelta(days=delta_days)
+                ss_today = ss_last + datetime.timedelta(days=delta_days)
+                sun_cache.update(
+                    {
+                        "date": today,
+                        "sunrise_today": sr_today,
+                        "sunset_today": ss_today,
+                        "sunrise_tomorrow": sr_today + datetime.timedelta(days=1),
+                        "sunset_yesterday": ss_today - datetime.timedelta(days=1),
+                    }
+                )
+                print(
+                    f"Sonnenzeiten nicht erreichbar, nutze Vortags-Daten: SR {sr_today.time()} / SS {ss_today.time()}"
+                )
+                return
+        print(f"Sonnenzeiten konnten nicht geholt werden: {exc}")
+
+
+def calculate_target_brightness(now: datetime.datetime) -> float:
+    """Berechnet Soll-Helligkeit laut Vorgabe."""
+    refresh_sun_cache(now)
+
+    sr_today = sun_cache.get("sunrise_today")
+    ss_today = sun_cache.get("sunset_today")
+    sr_tomorrow = sun_cache.get("sunrise_tomorrow")
+    ss_yesterday = sun_cache.get("sunset_yesterday")
+
+    # Fallbacks, falls API ausfällt
+    if not sr_today or not ss_today:
+        return MAX_BRIGHTNESS
+    if not sr_tomorrow:
+        sr_tomorrow = sr_today + datetime.timedelta(days=1)
+    if not ss_yesterday:
+        ss_yesterday = ss_today - datetime.timedelta(days=1)
+
+    # Nacht: von 1h vor letzterem Sonnenuntergang bis 1h nach Sonnenaufgang
+    night_start_prev = ss_yesterday - datetime.timedelta(hours=1)
+    night_end_morning = sr_today + datetime.timedelta(hours=1)
+    if night_start_prev <= now < night_end_morning:
+        return MIN_BRIGHTNESS
+
+    # Ramp-Up: 2h nach Nachtende auf MAX
+    ramp_up_start = night_end_morning
+    ramp_up_end = ramp_up_start + datetime.timedelta(hours=2)
+    if ramp_up_start <= now < ramp_up_end:
+        progress = (now - ramp_up_start) / (ramp_up_end - ramp_up_start)
+        return MIN_BRIGHTNESS + (MAX_BRIGHTNESS - MIN_BRIGHTNESS) * progress
+
+    # Abend: 3h vor Sonnenuntergang mit dimmen starten, 1h vorher Minimum
+    dim_start = ss_today - datetime.timedelta(hours=3)
+    dim_end = ss_today - datetime.timedelta(hours=1)
+    if dim_start <= now < dim_end:
+        progress = (now - dim_start) / (dim_end - dim_start)
+        return MAX_BRIGHTNESS - (MAX_BRIGHTNESS - MIN_BRIGHTNESS) * progress
+
+    # Nacht (aktueller Abend bis morgen)
+    night_start_evening = dim_end
+    night_end_next = sr_tomorrow + datetime.timedelta(hours=1)
+    if night_start_evening <= now < night_end_next:
+        return MIN_BRIGHTNESS
+
+    # Tagsüber maximal
+    return MAX_BRIGHTNESS
+
+
+def auto_brightness_loop():
+    """Regelt Helligkeit minütlich anhand Sonnenstand."""
+    global manual_override_until, ramp_start_time, ramp_end_time, ramp_start_brightness, ramp_target
+    while True:
+        now = datetime.datetime.now(LOCAL_TIMEZONE)
+        target = calculate_target_brightness(now)
+
+        with led_lock:
+            # Manual Override aktiv?
+            if manual_override_until and now < manual_override_until:
+                pass  # nichts tun, Nutzerwert lassen
+            else:
+                # Override abgelaufen -> Ramp-Start setzen
+                if manual_override_until:
+                    manual_override_until = None
+                    ramp_start_time = now
+                    ramp_end_time = now + datetime.timedelta(seconds=60)
+                    ramp_start_brightness = brightness
+                    ramp_target = target
+
+                # Ramp läuft?
+                if ramp_end_time and ramp_start_time and now < ramp_end_time:
+                    progress = (now - ramp_start_time) / (ramp_end_time - ramp_start_time)
+                    target_now = ramp_start_brightness + (ramp_target - ramp_start_brightness) * progress
+                else:
+                    ramp_end_time = None
+                    ramp_start_time = None
+                    target_now = target
+
+                current = brightness
+                if abs(target_now - current) > 0.01:
+                    apply_brightness_value(target_now)
+                    print(f">> Auto-Helligkeit: {brightness:.2f} (Stand {now.time()})")
+        time.sleep(60)
+
+# ===================================================================
 #   W E T T E R   A B R U F
 # ===================================================================
-OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY", "")
+OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY", "89d0ce00ba4f4eb3c096ff7c60bef867").strip()
 WEATHER_CITY = "Rodgau,DE"
+
+def mask_key(key: str) -> str:
+    """Hilfsfunktion: API-Key maskiert anzeigen."""
+    if not key:
+        return "leer"
+    if len(key) <= 8:
+        return f"{key}"
+    return f"{key[:4]}...{key[-4:]} (len={len(key)})"
 
 def get_weather_text():
     """Holt aktuelles Wetter für Rodgau und formatiert als Laufschrift"""
+    if not OPENWEATHER_API_KEY:
+        return "OPENWEATHER API KEY FEHLT", 0.5, False
     try:
         url = f"https://api.openweathermap.org/data/2.5/weather?q={WEATHER_CITY}&appid={OPENWEATHER_API_KEY}&units=metric&lang=de"
         res = requests.get(url, timeout=10)
-        data = res.json()
-        
         if res.status_code != 200:
-            return "WETTER NICHT VERFÜGBAR", 0.5
+            try:
+                err_msg = res.json().get("message", "")
+            except Exception:
+                err_msg = res.text[:200]
+            safe_key = mask_key(OPENWEATHER_API_KEY)
+            print(f"Wetter-Fehler: Status {res.status_code} - {err_msg} | key={safe_key}", flush=True)
+            detail = f"{res.status_code}: {err_msg}" if err_msg else f"{res.status_code}"
+            return f"WETTER NICHT VERFUEGBAR ({detail})", 0.5, False
+
+        data = res.json()
         
         temp = round(data['main']['temp'])
         desc = data['weather'][0]['description'].upper()
@@ -431,10 +639,10 @@ def get_weather_text():
         # -10°C = 0.66 (blau), 15°C = 0.33 (grün), 35°C = 0.0 (rot)
         temp_hue = max(0.0, min(0.66, 0.66 - (temp + 10) / 45 * 0.66))
         
-        return f"RODGAU: {temp} GRAD - {desc} - {humidity}% FEUCHTE - {pressure} HPA", temp_hue
+        return f"RODGAU: {temp} GRAD - {desc} - {humidity}% FEUCHTE - {pressure} HPA", temp_hue, True
     except Exception as e:
         print(f"Wetter-Fehler: {e}")
-        return "WETTER NICHT VERFÜGBAR", 0.5
+        return "WETTER NICHT VERFUEGBAR", 0.5, False
 
 def check_weather_time():
     """Prüft ob es x:55 Uhr ist und zeigt Wettermeldung"""
@@ -448,7 +656,7 @@ def check_weather_time():
         if now.minute == 55 and now.hour != last_weather_hour:
             last_weather_hour = now.hour
             
-            weather_text, temp_hue = get_weather_text()
+            weather_text, temp_hue, _ = get_weather_text()
             print(f">> Wettermeldung: {weather_text}")
             
             scroll_text = weather_text
@@ -531,12 +739,15 @@ def static_on():
 
 @app.route('/brightness',methods=['POST'])
 def set_brightness():
-    global brightness
+    global manual_override_until, ramp_end_time, ramp_start_time
     val=float(request.get_json().get('value',0.5))
+    now = datetime.datetime.now(LOCAL_TIMEZONE)
     with led_lock:
-        brightness=max(0.1,min(1.0,val))
-        leds.brightness=brightness
-    return jsonify(success=True,value=brightness)
+        new_val = apply_brightness_value(val)
+        manual_override_until = now + datetime.timedelta(minutes=5)
+        ramp_end_time = None
+        ramp_start_time = None
+    return jsonify(success=True,value=new_val)
 
 @app.route('/led_status')
 def led_status():
@@ -569,8 +780,8 @@ def test_weather():
     """Test-Endpoint für Wettermeldung"""
     global effect_thread, scroll_text, scroll_speed, scroll_hue
     
-    weather_text, temp_hue = get_weather_text()
-    print(f">> TEST Wettermeldung: {weather_text} (hue: {temp_hue})")
+    weather_text, temp_hue, ok = get_weather_text()
+    print(f">> TEST Wettermeldung: {weather_text} (hue: {temp_hue}) | key={mask_key(OPENWEATHER_API_KEY)}", flush=True)
     
     scroll_text = weather_text
     scroll_speed = 10
@@ -590,7 +801,7 @@ def test_weather():
     effect_thread = threading.Thread(target=weather_then_clock)
     effect_thread.start()
     
-    return jsonify(success=True, text=weather_text, hue=temp_hue)
+    return jsonify(success=ok, text=weather_text, hue=temp_hue, key=mask_key(OPENWEATHER_API_KEY))
 
 # ===================================================================
 #   M A I N
@@ -599,5 +810,9 @@ if __name__ == '__main__':
     # Starte Wetter-Check im Hintergrund
     weather_thread = threading.Thread(target=check_weather_time, daemon=True)
     weather_thread.start()
+
+    # Starte automatische Helligkeitsregelung
+    auto_bright_thread = threading.Thread(target=auto_brightness_loop, daemon=True)
+    auto_bright_thread.start()
     
     app.run(host='0.0.0.0', port=5050)

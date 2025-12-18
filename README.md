@@ -88,3 +88,33 @@ Unterstützt: A-Z, Ä, Ö, Ü, ß, 0-9, Sonderzeichen (!, ?, ., -, ,, :)
 ## Version
 
 **v1.0.3** (Dezember 2025)
+
+## Auto-Helligkeit (Sonnenstand)
+
+- Standort: `LATITUDE=50.0`, `LONGITUDE=8.9`, Zeitzone `Europe/Berlin` in `led_webapp.py`.
+- Quelle: https://api.sunrise-sunset.org liefert Sonnenauf/-untergang, Cache wird 1x/Tag aktualisiert.
+- Verhalten:
+  - Nacht: MIN_BRIGHTNESS (0.1) von 1h vor Sonnenuntergang bis 1h nach Sonnenaufgang.
+  - Ramp-Up: 2h nach Sonnenaufgang hoch auf MAX_BRIGHTNESS (1.0).
+  - Abend: 3h vor Sonnenuntergang dimmen, 1h vorher Minimum.
+  - Tag: MAX_BRIGHTNESS.
+- Manuelles Override: Helligkeits-Slider setzt den Wert für 5 Minuten fest; danach übernimmt die Automatik wieder. Im Log erscheint `>> Auto-Helligkeit: ...`.
+
+## Wetter-Troubleshooting (OpenWeather)
+
+1. `.env` prüfen: `cat /home/pi/ledcontrol/.env` → `OPENWEATHER_API_KEY=<dein key>`.
+2. Test-Endpoint lokal: `curl -X POST http://localhost:5050/test_weather`.
+   - Erwartet: `success:true` und `key:"89d0...f867"`.
+   - Bei 401: Key falsch/gesperrt oder mit Whitespaces; `.env` korrigieren, Service neu starten.
+3. Logs: `journalctl -u ledserver.service -n 30 | grep Wetter-Fehler`.
+4. Direkt gegen API: `curl "https://api.openweathermap.org/data/2.5/weather?q=Rodgau,DE&appid=<KEY>&units=metric&lang=de"`.
+
+## Git / GitHub Workflow (Kurz)
+
+- Status prüfen: `git status -sb`
+- Änderungen ansehen: `git diff` oder `git diff --stat`
+- Commit: `git add <files> && git commit -m "Kurze, präzise Nachricht"`
+- GitHub-Remote setzen (falls noch nicht): `git remote add origin git@github.com:<user>/ledcontrol.git`
+- Push: `git push -u origin main`
+
+Hinweis: Secrets wie `.env` nicht ins Repo committen.
