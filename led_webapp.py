@@ -597,7 +597,7 @@ def auto_brightness_loop():
 # ===================================================================
 #   W E T T E R   A B R U F
 # ===================================================================
-OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY", "89d0ce00ba4f4eb3c096ff7c60bef867").strip()
+OPENWEATHER_API_KEY = os.environ.get("OPENWEATHER_API_KEY", "").strip()
 WEATHER_CITY = "Rodgau,DE"
 
 def mask_key(key: str) -> str:
