@@ -7,7 +7,7 @@ Web-basierte Steuerung für ein 30x10 DotStar LED-Panel.
 - 🕐 **Uhr-Anzeige** mit Regenbogen-Sekundenring
 - 🌈 **Effekte**: Rainbow, Breathing, Sine Wave, Flash, Raupe
 - 📜 **Laufschrift** mit einstellbarer Farbe und Geschwindigkeit
-- 🌤️ **Wetter-Anzeige** für Rodgau (automatisch um x:55 Uhr)
+- 🌤️ **Wetter-Anzeige** für Ein Ort (automatisch um x:55 Uhr)
   - Temperatur, Beschreibung, Luftfeuchtigkeit und **Luftdruck (hPa)**
 - 🎨 **Statische Farbe** mit Helligkeitsregler
 
@@ -107,7 +107,7 @@ Unterstützt: A-Z, Ä, Ö, Ü, ß, 0-9, Sonderzeichen (!, ?, ., -, ,, :)
    - Erwartet: `success:true` und `key:"89d0...f867"`.
    - Bei 401: Key falsch/gesperrt oder mit Whitespaces; `.env` korrigieren, Service neu starten.
 3. Logs: `journalctl -u ledserver.service -n 30 | grep Wetter-Fehler`.
-4. Direkt gegen API: `curl "https://api.openweathermap.org/data/2.5/weather?q=Rodgau,DE&appid=<KEY>&units=metric&lang=de"`.
+4. Direkt gegen API: `curl "https://api.openweathermap.org/data/2.5/weather?q=Ein Ort,DE&appid=<KEY>&units=metric&lang=de"`.
 
 ## Git / GitHub Workflow (Kurz)
 
