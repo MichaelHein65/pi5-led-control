@@ -313,21 +313,43 @@
     const PANEL_WIDTH = 30;
     const PANEL_HEIGHT = 10;
     const LED_SIZE = canvas.width / PANEL_WIDTH;
+    const ROTATE_X = false; // oben ↔ unten spiegeln
+    const ROTATE_Y = true;  // links ↔ rechts spiegeln
+    const ROTATE_Z = true;  // 180-Grad-Drehung (beide Achsen zugleich)
+
+    function applyRotation(x, y) {
+      let rx = x;
+      let ry = y;
+      if (ROTATE_Z) {
+        rx = PANEL_WIDTH - 1 - rx;
+        ry = PANEL_HEIGHT - 1 - ry;
+      }
+      if (ROTATE_Y) {
+        rx = PANEL_WIDTH - 1 - rx;
+      }
+      if (ROTATE_X) {
+        ry = PANEL_HEIGHT - 1 - ry;
+      }
+      return [rx, ry];
+    }
+
+    function xyToIndex(x, y) {
+      const [rx, ry] = applyRotation(x, y);
+      if (rx % 2 === 0) {
+        return rx * PANEL_HEIGHT + ry;
+      }
+      return rx * PANEL_HEIGHT + (PANEL_HEIGHT - 1 - ry);
+    }
 
     function drawLEDs(ledData) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       for (let x = 0; x < PANEL_WIDTH; x++) {
         for (let y = 0; y < PANEL_HEIGHT; y++) {
-          // Snake-Pattern Mapping (wie im Backend)
-          const index = x * PANEL_HEIGHT + (x % 2 === 0 ? y : (PANEL_HEIGHT - 1 - y));
+          // Snake-Pattern Mapping inkl. Drehung wie im Backend
+          const index = xyToIndex(x, y);
           const color = ledData[index] || [0, 0, 0];
-
-          // Canvas-Rendering: 180° Drehung + Y-Flip (entspricht Panel-Ausrichtung)
-          const flippedX = PANEL_WIDTH - 1 - x;
-          const flippedY = PANEL_HEIGHT - 1 - y;
-
           ctx.fillStyle = `rgb(${color[0]}, ${color[1]}, ${color[2]})`;
-          ctx.fillRect(flippedX * LED_SIZE, flippedY * LED_SIZE, LED_SIZE - 1, LED_SIZE - 1);
+          ctx.fillRect(x * LED_SIZE, y * LED_SIZE, LED_SIZE - 1, LED_SIZE - 1);
         }
       }
     }
