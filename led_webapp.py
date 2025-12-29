@@ -14,6 +14,7 @@ rotate_z = True    # 180-Grad-Drehung (beide Achsen zugleich)
 from flask import Flask, request, jsonify, send_from_directory
 from threading import Lock
 import threading, time, math, colorsys, datetime, os
+from pathlib import Path
 from zoneinfo import ZoneInfo
 import board, adafruit_dotstar
 import requests  # Füge zu den Imports hinzu
@@ -89,13 +90,37 @@ ramp_start_brightness = None
 ramp_target = None
 
 # ===================================================================
+#   U M G E B U N G S V A R I A B L E N   L A D E N
+# ===================================================================
+def load_env_from_file():
+    """Lädt .env im Projektverzeichnis, falls Variablen fehlen."""
+    env_path = Path(__file__).resolve().parent / ".env"
+    if not env_path.exists():
+        return
+    try:
+        for line in env_path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            os.environ.setdefault(key.strip(), val.strip())
+    except Exception as exc:
+        print(f"Warnung: .env konnte nicht geladen werden: {exc}", flush=True)
+
+load_env_from_file()
+
+# ===================================================================
 #   L E D   S H O W   W R A P P E R
 # ===================================================================
 def update_leds():
     """LEDs anzeigen und Status für Web-Vorschau cachen"""
     global led_state_cache
     led_state_cache = [tuple(leds[i]) for i in range(NUM_LEDS)]
-    leds.show()
+    try:
+        leds.show()
+    except Exception as exc:
+        # Hardware-I/O darf den Effekt-Thread nicht töten
+        print(f">> leds.show() Fehler: {exc}", flush=True)
 
 
 def apply_brightness_value(val: float) -> float:
@@ -223,11 +248,24 @@ def show_clock():
         ring   = get_outer_ring_leds()
         pos    = (now.second + now.microsecond/1e6) / 60 * len(ring)
         snake  = 10
+        def add_color(idx, color):
+            curr = leds[idx]
+            if isinstance(curr, (tuple, list)) and len(curr) >= 3:
+                cr, cg, cb = curr[0], curr[1], curr[2]
+            else:
+                cr, cg, cb = 0, 0, 0
+            nr, ng, nb = color
+            leds[idx] = (max(cr, nr), max(cg, ng), max(cb, nb))
         for i in range(snake):
-            ox, oy = ring[int((pos + i) % len(ring))]
-            r, g, b = [int(c * 255) for c in colorsys.hsv_to_rgb(i / snake, 1, 1)]
-            idx     = xy_to_index(ox, oy)
-            leds[idx] = (r, g, b)
+            frac_pos = (pos + i) % len(ring)
+            base_idx = int(frac_pos)
+            next_idx = (base_idx + 1) % len(ring)
+            blend    = frac_pos - base_idx
+            r, g, b  = [int(c * 255) for c in colorsys.hsv_to_rgb(i / snake, 1, 1)]
+            color1   = (int(r * (1 - blend)), int(g * (1 - blend)), int(b * (1 - blend)))
+            color2   = (int(r * blend), int(g * blend), int(b * blend))
+            add_color(xy_to_index(*ring[base_idx]), color1)
+            add_color(xy_to_index(*ring[next_idx]), color2)
 
         # LED-Buffer anzeigen
         update_leds()
@@ -237,7 +275,12 @@ def run_clock_effect():
     print(">> Effekt 5: Uhr gestartet")
     try:
         while not stop_event.is_set():
-            show_clock()
+            try:
+                show_clock()
+            except Exception as exc:
+                print(f">> show_clock() Fehler: {exc}", flush=True)
+                import traceback; traceback.print_exc()
+                time.sleep(0.5)
             time.sleep(0.05)
     finally:
         leds.auto_write = True
@@ -708,10 +751,17 @@ def start_effect(idx):
     }
     if idx not in mapping:
         return jsonify(success=False,error="Unbekannter Effekt")
+    def run_with_logging(fn):
+        try:
+            fn()
+        except Exception as exc:
+            print(f">> Effekt {idx} ({fn.__name__}) abgebrochen: {exc}", flush=True)
+            import traceback; traceback.print_exc()
     with led_lock:
         stop_current_effect()
         leds.auto_write=False
-        effect_thread=threading.Thread(target=mapping[idx]); effect_thread.start()
+        effect_thread=threading.Thread(target=lambda: run_with_logging(mapping[idx]))
+        effect_thread.start()
     return jsonify(success=True)
 
 @app.route('/off', methods=['POST'])
@@ -744,7 +794,7 @@ def set_brightness():
     now = datetime.datetime.now(LOCAL_TIMEZONE)
     with led_lock:
         new_val = apply_brightness_value(val)
-        manual_override_until = now + datetime.timedelta(minutes=5)
+        manual_override_until = now.replace(hour=23, minute=59, second=59, microsecond=999999)
         ramp_end_time = None
         ramp_start_time = None
     return jsonify(success=True,value=new_val)
