@@ -213,9 +213,38 @@ def get_outer_ring_leds():
         [(0,y) for y in reversed(range(1,PANEL_HEIGHT-1))]
     )
 
+def get_background_color(now: datetime.datetime) -> tuple[int, int, int]:
+    """
+    Liefert eine dezente Hintergrundfarbe abhängig von Tageszeit.
+    - Nacht (Sonnenuntergang bis Sonnenaufgang): schwaches Rot
+    - Tag (Sonnenaufgang bis Sonnenuntergang): Regenbogenverlauf über gesamte Tageslänge
+    """
+    refresh_sun_cache(now)
+
+    sunrise = sun_cache.get("sunrise_today")
+    sunset = sun_cache.get("sunset_today")
+
+    # Fallback, falls keine Daten vorhanden sind
+    if not sunrise or not sunset:
+        return (20, 0, 0)
+
+    # Tagsüber: Farbverlauf über die Dauer zwischen Sonnenauf- und -untergang
+    if sunrise <= now < sunset:
+        day_span = (sunset - sunrise).total_seconds()
+        if day_span > 0:
+            progress = (now - sunrise).total_seconds() / day_span
+            hue = progress % 1.0  # einmal durch den Regenbogen pro Tag
+            r, g, b = colorsys.hsv_to_rgb(hue, 1, 0.12)  # bewusst schwach
+            return (int(r * 255), int(g * 255), int(b * 255))
+
+    # Nacht: schwaches Rot
+    return (20, 0, 0)
+
+
 def show_clock():
-    now      = datetime.datetime.now()
+    now      = datetime.datetime.now(LOCAL_TIMEZONE)
     time_str = f"{now.hour:02}:{now.minute:02}"
+    bg_color = get_background_color(now)
 
     start_y  = 2
     total_w  = sum(len(digit_patterns[c][0]) + 1 for c in time_str) - 1
@@ -231,7 +260,7 @@ def show_clock():
         else:
             # Hintergrund
             for i in range(NUM_LEDS):
-                leds[i] = color_map[' ']
+                leds[i] = bg_color
 
         # Ziffern zeichnen (korrekte Orientierung)
         off_x = start_x
@@ -674,6 +703,8 @@ def get_weather_text():
         desc = data['weather'][0]['description'].upper()
         humidity = data['main']['humidity']
         pressure = data['main']['pressure']  # Luftdruck in hPa
+        wind_speed = data.get('wind', {}).get('speed', 0)  # m/s
+        wind_kmh = round(wind_speed * 3.6)
         
         # Umlaute ersetzen für LED-Anzeige
         desc = desc.replace('Ä', 'AE').replace('Ö', 'OE').replace('Ü', 'UE').replace('ß', 'SS')
@@ -682,7 +713,11 @@ def get_weather_text():
         # -10°C = 0.66 (blau), 15°C = 0.33 (grün), 35°C = 0.0 (rot)
         temp_hue = max(0.0, min(0.66, 0.66 - (temp + 10) / 45 * 0.66))
         
-        return f"RODGAU: {temp} GRAD - {desc} - {humidity}% FEUCHTE - {pressure} HPA", temp_hue, True
+        return (
+            f"RODGAU: {temp} GRAD - {desc} - {humidity}% FEUCHTE - {pressure} HPA - WIND {wind_kmh} KMH",
+            temp_hue,
+            True,
+        )
     except Exception as e:
         print(f"Wetter-Fehler: {e}")
         return "WETTER NICHT VERFUEGBAR", 0.5, False

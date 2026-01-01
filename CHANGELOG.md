@@ -4,6 +4,10 @@ Alle bemerkenswerten Änderungen an diesem Projekt sind in dieser Datei dokument
 
 ## [Unreleased]
 
+### ✨ Features
+- Uhr-Hintergrund folgt Tageszeit: Tagsüber schwacher Regenbogenverlauf abhängig von Sonnenauf/-untergang, nachts schwaches Rot
+- Wetter-Laufschrift zeigt jetzt auch Windgeschwindigkeit in km/h an
+
 ## [1.0.3] - 2025-12-08
 
 ### 🔒 Security
@@ -93,4 +97,3 @@ Alle bemerkenswerten Änderungen an diesem Projekt sind in dieser Datei dokument
 - [ ] SD-Karten-Speicherung für Szenen
 - [ ] Voice-Control Integration
 - [ ] REST API Dokumentation (Swagger/OpenAPI)
-
