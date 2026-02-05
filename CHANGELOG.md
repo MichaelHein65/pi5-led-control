@@ -7,6 +7,7 @@ Alle bemerkenswerten Änderungen an diesem Projekt sind in dieser Datei dokument
 ### ✨ Features
 - Uhr-Hintergrund folgt Tageszeit: Tagsüber schwacher Regenbogenverlauf abhängig von Sonnenauf/-untergang, nachts schwaches Rot
 - Wetter-Laufschrift zeigt jetzt auch Windgeschwindigkeit in km/h an
+- iPhone-Präsenz: Uhr automatisch an/aus basierend auf Host-Check (Ping)
 
 ## [1.0.3] - 2025-12-08
 

@@ -5,6 +5,7 @@ Web-basierte Steuerung für ein 30x10 DotStar LED-Panel.
 ## Features
 
 - 🕐 **Uhr-Anzeige** mit Regenbogen-Sekundenring
+- 📶 **Präsenz-Erkennung**: Uhr an/aus basierend auf Ping (z. B. iPhone im WLAN)
 - 🌈 **Effekte**: Rainbow, Breathing, Sine Wave, Flash, Raupe
 - 📜 **Laufschrift** mit einstellbarer Farbe und Geschwindigkeit
 - 🌤️ **Wetter-Anzeige** für Ein Ort (automatisch um x:55 Uhr)
@@ -80,6 +81,17 @@ echo 'OPENWEATHER_API_KEY=dein_key_hier' > .env
 ```
 
 Hole dir einen kostenlosen Key unter: https://openweathermap.org/api
+
+## Präsenz-Erkennung (Ping)
+
+Wenn `PRESENCE_IP` erreichbar ist, startet die Uhr. Wenn nicht, werden die LEDs ausgeschaltet.
+Konfiguration über `.env`:
+
+```bash
+PRESENCE_IP=192.168.0.220
+PRESENCE_INTERVAL=30
+PRESENCE_PING_TIMEOUT=1
+```
 
 ## Buchstaben
 
