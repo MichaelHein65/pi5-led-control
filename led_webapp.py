@@ -13,7 +13,7 @@ rotate_z = True    # 180-Grad-Drehung (beide Achsen zugleich)
 # ===================================================================
 from flask import Flask, request, jsonify, send_from_directory
 from threading import Lock
-import threading, time, math, colorsys, datetime, os
+import threading, time, math, colorsys, datetime, os, subprocess
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import board, adafruit_dotstar
@@ -34,6 +34,9 @@ MAX_BRIGHTNESS = 1.0
 
 brightness   = 0.3
 static_color = (255, 0, 0)
+PRESENCE_IP = os.environ.get("PRESENCE_IP", "192.168.0.220")
+PRESENCE_INTERVAL = int(os.environ.get("PRESENCE_INTERVAL", "30"))
+PRESENCE_PING_TIMEOUT = int(os.environ.get("PRESENCE_PING_TIMEOUT", "1"))
 
 # ===================================================================
 #   B A S I S - S N A K E - M A P P I N G   (ohne Drehung!)
@@ -122,6 +125,11 @@ def update_leds():
         # Hardware-I/O darf den Effekt-Thread nicht töten
         print(f">> leds.show() Fehler: {exc}", flush=True)
 
+def set_all_leds(color: tuple[int, int, int]) -> None:
+    for i in range(NUM_LEDS):
+        leds[i] = color
+    update_leds()
+
 
 def apply_brightness_value(val: float) -> float:
     """Clamp und übertrage Helligkeit auf LEDs."""
@@ -130,6 +138,45 @@ def apply_brightness_value(val: float) -> float:
     brightness = new_val
     leds.brightness = brightness
     return new_val
+
+# ===================================================================
+#   I P H O N E - P R Ä S E N Z
+# ===================================================================
+def is_host_online(ip: str) -> bool:
+    try:
+        result = subprocess.run(
+            ["ping", "-c", "1", "-W", str(PRESENCE_PING_TIMEOUT), ip],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=PRESENCE_PING_TIMEOUT + 1,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+def presence_loop():
+    global effect_thread
+    last_state = None
+    while True:
+        online = is_host_online(PRESENCE_IP)
+        if online != last_state:
+            with led_lock:
+                stop_current_effect()
+                if online:
+                    leds.auto_write = False
+                    def run_with_logging():
+                        try:
+                            run_clock_effect()
+                        except Exception as exc:
+                            print(f">> Präsenz Uhr-Effekt abgebrochen: {exc}", flush=True)
+                            import traceback; traceback.print_exc()
+                    effect_thread = threading.Thread(target=run_with_logging)
+                    effect_thread.start()
+                else:
+                    set_all_leds((0, 0, 0))
+            last_state = online
+        time.sleep(PRESENCE_INTERVAL)
 
 # ===================================================================
 #   Z I F F E R N - P A T T E R N S   &   F A R B E N
@@ -771,7 +818,7 @@ def stop_current_effect():
         effect_thread.join(timeout=1)
     stop_event.clear()
 
-@app.route('/effect/<int:idx>', methods=['POST'])
+@app.route('/effect/<int:idx>', methods=['POST', 'GET'])
 def start_effect(idx):
     global effect_thread
     mapping={
@@ -799,7 +846,7 @@ def start_effect(idx):
         effect_thread.start()
     return jsonify(success=True)
 
-@app.route('/off', methods=['POST'])
+@app.route('/off', methods=['POST', 'GET'])
 def off():
     with led_lock:
         stop_current_effect()
@@ -899,5 +946,9 @@ if __name__ == '__main__':
     # Starte automatische Helligkeitsregelung
     auto_bright_thread = threading.Thread(target=auto_brightness_loop, daemon=True)
     auto_bright_thread.start()
+
+    # Starte iPhone-Präsenzprüfung
+    presence_thread = threading.Thread(target=presence_loop, daemon=True)
+    presence_thread.start()
     
     app.run(host='0.0.0.0', port=5050)
