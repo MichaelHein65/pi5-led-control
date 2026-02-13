@@ -9,6 +9,17 @@ Alle bemerkenswerten Änderungen an diesem Projekt sind in dieser Datei dokument
 - Wetter-Laufschrift zeigt jetzt auch Windgeschwindigkeit in km/h an
 - iPhone-Präsenz: Uhr automatisch an/aus basierend auf Host-Check (Ping)
 
+### 🐛 Bugfix
+- Effekt-Thread-Start/Stop zentralisiert (`start_effect_worker`) und mit separatem `effect_lock` abgesichert
+- Race-Conditions beim Umschalten von Uhr/Wetter/Laufschrift reduziert, die zu Hängern führen konnten
+- `stop_current_effect()` meldet jetzt blockierende Threads sichtbar statt still weiterzulaufen
+- Wetter-Timer und API-Endpoints nutzen denselben sicheren Start-/Stop-Pfad
+
+### ⚙️ Konfiguration
+- Neue Umgebungsvariable `PRESENCE_ENABLED` (Präsenzprüfung komplett an/aus)
+- Neue Umgebungsvariable `PRESENCE_STOP_WHEN_OFFLINE` (bei Offline LEDs aus/Stop optional)
+- Präsenz-Intervalle online/offline getrennt konfigurierbar (`PRESENCE_INTERVAL_ONLINE`, `PRESENCE_INTERVAL_OFFLINE`)
+
 ## [1.0.3] - 2025-12-08
 
 ### 🔒 Security

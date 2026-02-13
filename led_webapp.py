@@ -34,9 +34,21 @@ MAX_BRIGHTNESS = 1.0
 
 brightness   = 0.3
 static_color = (255, 0, 0)
+
+def env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
 PRESENCE_IP = os.environ.get("PRESENCE_IP", "192.168.0.220")
 PRESENCE_INTERVAL = int(os.environ.get("PRESENCE_INTERVAL", "30"))
+PRESENCE_INTERVAL_OFFLINE = int(os.environ.get("PRESENCE_INTERVAL_OFFLINE", "5"))
+PRESENCE_INTERVAL_ONLINE = int(os.environ.get("PRESENCE_INTERVAL_ONLINE", str(PRESENCE_INTERVAL)))
 PRESENCE_PING_TIMEOUT = int(os.environ.get("PRESENCE_PING_TIMEOUT", "1"))
+PRESENCE_GRACE = int(os.environ.get("PRESENCE_GRACE", "120"))
+PRESENCE_ENABLED = env_bool("PRESENCE_ENABLED", True)
+PRESENCE_STOP_WHEN_OFFLINE = env_bool("PRESENCE_STOP_WHEN_OFFLINE", False)
 
 # ===================================================================
 #   B A S I S - S N A K E - M A P P I N G   (ohne Drehung!)
@@ -73,6 +85,7 @@ leds = adafruit_dotstar.DotStar(
 )
 led_lock = Lock()
 stop_event = threading.Event()
+effect_lock = Lock()
 
 # LED Status Cache für Web-Vorschau
 led_state_cache = [(0, 0, 0)] * NUM_LEDS
@@ -158,25 +171,28 @@ def is_host_online(ip: str) -> bool:
 def presence_loop():
     global effect_thread
     last_state = None
+    last_seen = 0.0
     while True:
-        online = is_host_online(PRESENCE_IP)
+        now = time.time()
+        if is_host_online(PRESENCE_IP):
+            last_seen = now
+        online = (now - last_seen) <= PRESENCE_GRACE
         if online != last_state:
-            with led_lock:
-                stop_current_effect()
-                if online:
-                    leds.auto_write = False
-                    def run_with_logging():
-                        try:
-                            run_clock_effect()
-                        except Exception as exc:
-                            print(f">> Präsenz Uhr-Effekt abgebrochen: {exc}", flush=True)
-                            import traceback; traceback.print_exc()
-                    effect_thread = threading.Thread(target=run_with_logging)
-                    effect_thread.start()
-                else:
+            if online:
+                def run_with_logging():
+                    try:
+                        run_clock_effect()
+                    except Exception as exc:
+                        print(f">> Präsenz Uhr-Effekt abgebrochen: {exc}", flush=True)
+                        import traceback; traceback.print_exc()
+                start_effect_worker(run_with_logging)
+            elif PRESENCE_STOP_WHEN_OFFLINE:
+                with effect_lock:
+                    stop_current_effect()
+                with led_lock:
                     set_all_leds((0, 0, 0))
             last_state = online
-        time.sleep(PRESENCE_INTERVAL)
+        time.sleep(PRESENCE_INTERVAL_ONLINE if online else PRESENCE_INTERVAL_OFFLINE)
 
 # ===================================================================
 #   Z I F F E R N - P A T T E R N S   &   F A R B E N
@@ -771,7 +787,7 @@ def get_weather_text():
 
 def check_weather_time():
     """Prüft ob es x:55 Uhr ist und zeigt Wettermeldung"""
-    global effect_thread, scroll_text, scroll_speed, scroll_hue
+    global scroll_text, scroll_speed, scroll_hue
     
     last_weather_hour = -1
     
@@ -796,11 +812,9 @@ def check_weather_time():
                     leds.auto_write = False
                     run_clock_effect()
             
-            with led_lock:
-                stop_current_effect()
-                leds.auto_write = False
-            effect_thread = threading.Thread(target=weather_then_clock)
-            effect_thread.start()
+            started = start_effect_worker(weather_then_clock)
+            if not started:
+                print(">> Warnung: Wetter-Effekt konnte nicht gestartet werden (Stop blockiert)", flush=True)
         
         time.sleep(30)
 
@@ -808,19 +822,34 @@ def check_weather_time():
 #   F L A S K  +  T H R E A D - C O N T R O L
 # ===================================================================
 app = Flask(__name__)
-led_lock = Lock()
-stop_event = threading.Event()
 effect_thread = None
 
 def stop_current_effect():
+    global effect_thread
     stop_event.set()
-    if effect_thread and effect_thread.is_alive():
-        effect_thread.join(timeout=1)
+    current = effect_thread
+    if current and current.is_alive():
+        current.join(timeout=2.0)
+        if current.is_alive():
+            print(">> Warnung: Effekt-Thread konnte nicht sauber gestoppt werden", flush=True)
+            return False
+    effect_thread = None
     stop_event.clear()
+    return True
+
+def start_effect_worker(target):
+    global effect_thread
+    with effect_lock:
+        if not stop_current_effect():
+            return False
+        with led_lock:
+            leds.auto_write = False
+        effect_thread = threading.Thread(target=target, daemon=True)
+        effect_thread.start()
+    return True
 
 @app.route('/effect/<int:idx>', methods=['POST', 'GET'])
 def start_effect(idx):
-    global effect_thread
     mapping={
         0:run_rainbow_effect,
         1:run_breathing_effect,
@@ -839,17 +868,16 @@ def start_effect(idx):
         except Exception as exc:
             print(f">> Effekt {idx} ({fn.__name__}) abgebrochen: {exc}", flush=True)
             import traceback; traceback.print_exc()
-    with led_lock:
-        stop_current_effect()
-        leds.auto_write=False
-        effect_thread=threading.Thread(target=lambda: run_with_logging(mapping[idx]))
-        effect_thread.start()
+    started = start_effect_worker(lambda: run_with_logging(mapping[idx]))
+    if not started:
+        return jsonify(success=False, error="Vorheriger Effekt blockiert Stop"), 409
     return jsonify(success=True)
 
 @app.route('/off', methods=['POST', 'GET'])
 def off():
-    with led_lock:
+    with effect_lock:
         stop_current_effect()
+    with led_lock:
         for i in range(NUM_LEDS): leds[i]=(0,0,0)
         update_leds()
     return jsonify(success=True)
@@ -863,8 +891,9 @@ def set_static_color():
 
 @app.route('/static_on',methods=['POST'])
 def static_on():
-    with led_lock:
+    with effect_lock:
         stop_current_effect()
+    with led_lock:
         for i in range(NUM_LEDS): leds[i]=static_color
         update_leds()
     return jsonify(success=True)
@@ -894,23 +923,20 @@ def ui_index(): return send_from_directory('/home/pi/ledcontrol','index.html')
 
 @app.route('/scrolltext', methods=['POST'])
 def start_scrolltext():
-    global effect_thread, scroll_text, scroll_speed, scroll_hue
+    global scroll_text, scroll_speed, scroll_hue
     data = request.get_json()
     scroll_text = data.get('text', 'HALLO')
     scroll_speed = data.get('speed', 5)
     scroll_hue = data.get('hue', 0.5)
-    
-    with led_lock:
-        stop_current_effect()
-        leds.auto_write = False
-        effect_thread = threading.Thread(target=run_scrolltext_effect, args=(0,))  # 0 = unendlich
-        effect_thread.start()
+    started = start_effect_worker(lambda: run_scrolltext_effect(0))  # 0 = unendlich
+    if not started:
+        return jsonify(success=False, error="Vorheriger Effekt blockiert Stop"), 409
     return jsonify(success=True)
 
 @app.route('/test_weather', methods=['POST'])
 def test_weather():
     """Test-Endpoint für Wettermeldung"""
-    global effect_thread, scroll_text, scroll_speed, scroll_hue
+    global scroll_text, scroll_speed, scroll_hue
     
     weather_text, temp_hue, ok = get_weather_text()
     print(f">> TEST Wettermeldung: {weather_text} (hue: {temp_hue}) | key={mask_key(OPENWEATHER_API_KEY)}", flush=True)
@@ -927,11 +953,9 @@ def test_weather():
             leds.auto_write = False
             run_clock_effect()
     
-    with led_lock:
-        stop_current_effect()
-        leds.auto_write = False
-    effect_thread = threading.Thread(target=weather_then_clock)
-    effect_thread.start()
+    started = start_effect_worker(weather_then_clock)
+    if not started:
+        return jsonify(success=False, error="Vorheriger Effekt blockiert Stop"), 409
     
     return jsonify(success=ok, text=weather_text, hue=temp_hue, key=mask_key(OPENWEATHER_API_KEY))
 
@@ -947,8 +971,15 @@ if __name__ == '__main__':
     auto_bright_thread = threading.Thread(target=auto_brightness_loop, daemon=True)
     auto_bright_thread.start()
 
-    # Starte iPhone-Präsenzprüfung
-    presence_thread = threading.Thread(target=presence_loop, daemon=True)
-    presence_thread.start()
+    # Starte iPhone-Präsenzprüfung (optional)
+    if PRESENCE_ENABLED:
+        presence_thread = threading.Thread(target=presence_loop, daemon=True)
+        presence_thread.start()
+        print(
+            f">> Präsenz aktiv: IP={PRESENCE_IP}, stop_offline={PRESENCE_STOP_WHEN_OFFLINE}",
+            flush=True,
+        )
+    else:
+        print(">> Präsenz deaktiviert (PRESENCE_ENABLED=0)", flush=True)
     
     app.run(host='0.0.0.0', port=5050)

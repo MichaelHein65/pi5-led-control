@@ -84,14 +84,35 @@ Hole dir einen kostenlosen Key unter: https://openweathermap.org/api
 
 ## Präsenz-Erkennung (Ping)
 
-Wenn `PRESENCE_IP` erreichbar ist, startet die Uhr. Wenn nicht, werden die LEDs ausgeschaltet.
+Wenn `PRESENCE_IP` erreichbar ist, startet die Uhr.
+Ob bei `offline` gestoppt/ausgeschaltet wird, ist jetzt konfigurierbar.
 Konfiguration über `.env`:
 
 ```bash
+PRESENCE_ENABLED=1
 PRESENCE_IP=192.168.0.220
 PRESENCE_INTERVAL=30
+PRESENCE_INTERVAL_ONLINE=30
+PRESENCE_INTERVAL_OFFLINE=5
 PRESENCE_PING_TIMEOUT=1
+PRESENCE_GRACE=120
+PRESENCE_STOP_WHEN_OFFLINE=0
 ```
+
+- `PRESENCE_ENABLED=0` deaktiviert die Präsenzprüfung komplett.
+- `PRESENCE_STOP_WHEN_OFFLINE=1` stoppt Effekt und schaltet auf Schwarz, sobald das Gerät als offline gilt.
+- `PRESENCE_STOP_WHEN_OFFLINE=0` (Default) verhindert unbeabsichtigtes Ausgehen bei kurzen WLAN-/Ping-Aussetzern.
+
+## Stabilität (Uhr hängt / hohe CPU-Last)
+
+Bei wiederholtem Effektwechsel wurden Thread-Starts/Stops zentralisiert und mit eigenem Lock abgesichert.
+Dadurch werden Race-Conditions reduziert, die zu hängender Uhr oder hoher Last führen konnten.
+
+Wenn die Uhr dennoch stoppt:
+
+1. Server neu starten: `./start_led_server.sh`
+2. Präsenz testweise deaktivieren: `PRESENCE_ENABLED=0`
+3. Optional weniger aggressiv prüfen: `PRESENCE_INTERVAL_OFFLINE=10`
 
 ## Buchstaben
 
